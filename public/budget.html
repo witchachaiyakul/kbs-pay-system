@@ -1,7 +1,25 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบแผนปฏิบัติการ - สรุปงบประมาณ</title>
+
+  <!-- 1. Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- 2. Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- 3. Custom CSS ของระบบ -->
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
 <!-- ==========================================================================
-     MODULE 2: KBS BUDGET (งานแผนโครงการ - สรุปงบประมาณ)
+     MODULE 2: KBS BUDGET (สรุปงบประมาณ & ภาพรวม)
      ========================================================================== -->
-<div id="kbsbudget" class="form-container d-none container py-3">
+<div id="kbsbudget" class="form-container py-3">
   <!-- ปุ่มย้อนกลับหน้า Dashboard -->
   <div class="btn-back mb-3" onclick="resetFormToMain()">
     <i class="bi bi-arrow-left"></i> กลับหน้าหลัก
@@ -213,7 +231,7 @@
 </div>
 
 <!-- ==========================================================================
-     MODAL POP-UP แสดงรายละเอียดงบประมาณรายโครงการ/กิจกรรม
+     MODAL POP-UP: รายละเอียดงบประมาณรายโครงการ/กิจกรรม
      ========================================================================== -->
 <div class="modal fade" id="budgetDetailModal" tabindex="-1" aria-labelledby="budgetDetailModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -225,7 +243,6 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body p-4 bg-light">
-        <!-- Spinner Loading -->
         <div id="modalLoading" class="text-center py-5">
           <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">กำลังโหลด...</span>
@@ -233,7 +250,6 @@
           <p class="mt-2 text-muted fw-semibold">กำลังดึงข้อมูลจากฐานข้อมูล Firestore...</p>
         </div>
 
-        <!-- ตารางแสดงรายการ -->
         <div id="modalTableWrapper" class="table-responsive d-none">
           <table class="table table-bordered table-hover align-middle bg-white shadow-sm">
             <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
@@ -247,13 +263,10 @@
                 <th style="width: 11%;">7. ผู้รับผิดชอบ</th>
               </tr>
             </thead>
-            <tbody id="modalBudgetDetailBody">
-              <!-- Render ข้อมูลด้วย JS -->
-            </tbody>
+            <tbody id="modalBudgetDetailBody"></tbody>
           </table>
         </div>
 
-        <!-- ข้อความเมื่อไม่พบข้อมูล -->
         <div id="modalEmptyMsg" class="alert alert-warning text-center d-none my-3">
           <i class="bi bi-exclamation-circle me-1"></i> ไม่พบข้อมูลรายการโครงการในหมวดหมู่นี้
         </div>
@@ -300,47 +313,47 @@
     </div>
 
     <!-- 2. เมนูตารางรายการโครงการ/กิจกรรม -->
-<div class="card-section mb-4">
-  <div class="card-section-header">
-    <i class="bi bi-table"></i> 2. รายการโครงการและกิจกรรม (<span id="selectedDeptName" style="color: var(--gold-accent, #d4af37);">เลือกฝ่ายด้านบน</span>)
-  </div>
-  <div class="card-body p-4">
-    
-    <!-- Spinner Loading -->
-    <div id="deptTableLoading" class="text-center py-4 d-none">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">กำลังโหลด...</span>
+    <div class="card-section mb-4">
+      <div class="card-section-header">
+        <i class="bi bi-table"></i> 2. รายการโครงการและกิจกรรม (<span id="selectedDeptName" style="color: var(--gold-accent, #d4af37);">เลือกฝ่ายด้านบน</span>)
       </div>
-      <p class="mt-2 text-muted fw-semibold">กำลังดึงข้อมูลโครงการจาก Firestore...</p>
-    </div>
+      <div class="card-body p-4">
+        
+        <div id="deptTableLoading" class="text-center py-4 d-none">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">กำลังโหลด...</span>
+          </div>
+          <p class="mt-2 text-muted fw-semibold">กำลังดึงข้อมูลโครงการจาก Firestore...</p>
+        </div>
 
-    <!-- ตารางแสดงรายการโครงการ -->
-    <div id="deptTableWrapper" class="table-responsive">
-      <table class="table table-bordered table-hover align-middle bg-white shadow-sm mb-0">
-        <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
-          <tr class="text-center small align-middle">
-            <th style="width: 10%;">ฝ่าย</th>
-            <th style="width: 18%;">ชื่อโครงการ</th>
-            <th style="width: 20%;">ชื่อกิจกรรม</th>
-            <th style="width: 11%;">ประเภทเงิน</th>
-            <th style="width: 9%;">งบตั้งไว้</th>
-            <th style="width: 9%;">ใช้ไปแล้ว</th>
-            <th style="width: 9%;">คงเหลือ</th>
-            <th style="width: 9%;">ผู้รับผิดชอบ</th>
-            <th style="width: 5%;">ดำเนินการ</th>
-          </tr>
-        </thead>
-        <tbody id="deptActivitiesTableBody">
-          <tr>
-            <td colspan="9" class="text-center py-4 text-muted">
-              <i class="bi bi-hand-index-thumb me-1"></i> กรุณากดเลือกฝ่ายด้านบนเพื่อแสดงรายการโครงการ
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        <div id="deptTableWrapper" class="table-responsive">
+          <table class="table table-bordered table-hover align-middle bg-white shadow-sm mb-0">
+            <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
+              <tr class="text-center small align-middle">
+                <th style="width: 10%;">ฝ่าย</th>
+                <th style="width: 18%;">ชื่อโครงการ</th>
+                <th style="width: 20%;">ชื่อกิจกรรม</th>
+                <th style="width: 11%;">ประเภทเงิน</th>
+                <th style="width: 9%;">งบตั้งไว้</th>
+                <th style="width: 9%;">ใช้ไปแล้ว</th>
+                <th style="width: 9%;">คงเหลือ</th>
+                <th style="width: 9%;">ผู้รับผิดชอบ</th>
+                <th style="width: 5%;">ดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody id="deptActivitiesTableBody">
+              <tr>
+                <td colspan="9" class="text-center py-4 text-muted">
+                  <i class="bi bi-hand-index-thumb me-1"></i> กรุณากดเลือกฝ่ายด้านบนเพื่อแสดงรายการโครงการ
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-  </div>
+      </div>
+    </div>
+  </main>
 </div>
 
 <!-- ==========================================================================
@@ -350,7 +363,6 @@
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content border-0 shadow-lg">
       
-      <!-- Modal Header -->
       <div class="modal-header text-white" style="background-color: var(--navy-primary, #1e3a8a); border-bottom: 3px solid var(--gold-accent, #d4af37);">
         <h5 class="modal-title fw-bold" id="disburseModalLabel">
           <i class="bi bi-receipt-cutoff me-2" style="color: var(--gold-accent, #d4af37);"></i>ตัดจ่ายงบประมาณ: <span id="mdActivityName" style="color: var(--gold-accent, #d4af37);"></span>
@@ -360,7 +372,7 @@
 
       <div class="modal-body p-4 bg-light">
         
-        <!-- 🎯 ส่วนที่ 1: ประวัติการตัดจ่ายที่เคยทำมาแล้ว -->
+        <!-- ส่วนที่ 1: ประวัติการตัดจ่าย -->
         <div class="card border mb-4 shadow-sm">
           <div class="card-header bg-white fw-bold text-navy">
             <i class="bi bi-clock-history me-1"></i> ประวัติรายการที่เคยตัดงบประมาณจากกิจกรรมนี้
@@ -385,7 +397,7 @@
           </div>
         </div>
 
-        <!-- 🎯 ส่วนที่ 2: ฟอร์มขออนุมัติตัดจ่าย -->
+        <!-- ส่วนที่ 2: ฟอร์มขออนุมัติตัดจ่าย -->
         <div class="card border shadow-sm">
           <div class="card-header bg-navy text-white fw-bold" style="background-color: var(--navy-primary, #1e3a8a);">
             <i class="bi bi-pencil-square me-1" style="color: var(--gold-accent);"></i> กรอกข้อมูลขออนุมัติตัดจ่าย
@@ -394,7 +406,6 @@
             <form id="disburseForm">
               <div class="row g-3">
                 
-                <!-- 1. เพื่อดำเนินงาน -->
                 <div class="col-md-6">
                   <label class="form-label fw-bold">1. เพื่อดำเนินงาน</label>
                   <select id="mdSelPurchase" class="form-select" required>
@@ -407,57 +418,51 @@
                   </select>
                 </div>
 
-                <!-- 2. จำนวนเงิน -->
                 <div class="col-md-6">
                   <label class="form-label fw-bold">2. จำนวนเงินที่ขอตัดจ่าย (บาท)</label>
                   <input type="number" id="mdInpAmount" class="form-control fw-bold border-primary" min="0.01" step="0.01" placeholder="0.00" oninput="calculateDisburseBalance()" required>
                 </div>
 
-                <!-- 3. ผู้ขอใช้งบประมาณ (ดึงจาก committees) -->
                 <div class="col-md-6">
                   <label class="form-label fw-bold">3. ผู้ขอใช้งบประมาณ</label>
                   <input type="text" id="mdSelCommittee" class="form-control" list="committee_list" placeholder="พิมพ์ชื่อเพื่อค้นหา..." autocomplete="off" required>
-                  <datalist id="committee_list">
-                  <!-- รายชื่อจาก Firestore จะถูกโหลดมาใส่ที่นี่ -->
-                    </datalist>
+                  <datalist id="committee_list"></datalist>
                 </div>
 
-                <!-- 4. รายละเอียด -->
                 <div class="col-md-6">
-                  <label class="form-label fw-bold">4. รายละเอียด</label>
+                  <label class="form-label fw-bold">4. รายรายละเอียด</label>
                   <textarea id="mdInpRemark" class="form-control" rows="2" placeholder="ระบุเหตุผลความจำเป็นหรือรายละเอียด..."></textarea>
                 </div>
 
               </div>
 
-              <!-- 🎯 กล่องสรุปการคำนวณเงิน Real-time (ปรับปรุงแสดง 5 รายการ) -->
+              <!-- กล่องสรุปการคำนวณเงิน Real-time -->
               <div class="mt-4 p-3 rounded-3 bg-light border">
                 <div class="d-flex justify-content-between mb-1">
-                <span>งบประมาณที่ได้รับจัดสรร:</span>
-                <strong id="calcTotalBudget" class="text-dark">0.00 ฿</strong>
-              </div>
+                  <span>งบประมาณที่ได้รับจัดสรร:</span>
+                  <strong id="calcTotalBudget" class="text-dark">0.00 ฿</strong>
+                </div>
                 <div class="d-flex justify-content-between mb-1">
-                <span>ใช้ไปแล้ว:</span>
-                <strong id="calcUsedBudget" class="text-danger">0.00 ฿</strong>
-              </div>
+                  <span>ใช้ไปแล้ว:</span>
+                  <strong id="calcUsedBudget" class="text-danger">0.00 ฿</strong>
+                </div>
                 <div class="d-flex justify-content-between mb-1">
-                <span>คงเหลือ:</span>
-                <strong id="calcBeforeRemain" class="text-primary">0.00 ฿</strong>
-              </div>
+                  <span>คงเหลือ:</span>
+                  <strong id="calcBeforeRemain" class="text-primary">0.00 ฿</strong>
+                </div>
                 <div class="d-flex justify-content-between mb-1">
-                <span>จำนวนเงินขอใช้ครั้งนี้:</span>
-                <strong id="calcReqAmount" class="text-danger">0.00 ฿</strong>
-              </div>
+                  <span>จำนวนเงินขอใช้ครั้งนี้:</span>
+                  <strong id="calcReqAmount" class="text-danger">0.00 ฿</strong>
+                </div>
                 <div class="d-flex justify-content-between fs-5 fw-bold pt-2 border-top">
-                <span>คงเหลือสุทธิหลังตัด:</span>
-                <strong id="calcAfterRemain" class="text-success">0.00 ฿</strong>
-              </div>
+                  <span>คงเหลือสุทธิหลังตัด:</span>
+                  <strong id="calcAfterRemain" class="text-success">0.00 ฿</strong>
+                </div>
 
-              <!-- แจ้งเตือนยอดติดลบ -->
                 <div id="alertOverBudget" class="alert alert-danger d-none mt-3 mb-0 text-center fw-bold">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>คำเตือน: ยอดเงินขอตัดจ่ายเกินวงเงินคงเหลือ (ติดลบ <span id="overAmount">0.00</span> บาท) ไม่สามารถอนุมัติได้!
+                  <i class="bi bi-exclamation-triangle-fill me-2"></i>คำเตือน: ยอดเงินขอตัดจ่ายเกินวงเงินคงเหลือ (ติดลบ <span id="overAmount">0.00</span> บาท) ไม่สามารถอนุมัติได้!
+                </div>
               </div>
-            </div>
 
             </form>
           </div>
@@ -465,7 +470,6 @@
 
       </div>
 
-      <!-- Modal Footer -->
       <div class="modal-footer bg-white border-top justify-content-between">
         <button type="button" class="btn btn-secondary px-4 fw-semibold" data-bs-dismiss="modal">ยกเลิก</button>
         <button type="button" id="btnSubmitDisburseDoc" class="btn btn-navy px-5 fw-bold shadow" onclick="submitDisbursePlanDoc()">
@@ -476,7 +480,7 @@
   </div>
 </div>
 
-<!-- 🎯 Pop-up Modal แจ้งเตือนเมื่อตัดแผนสำเร็จ -->
+<!-- Modal แจ้งเตือนเมื่อตัดแผนสำเร็จ -->
 <div class="modal fade" id="disburseSuccessModal" data-bs-backdrop="static" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center p-4 rounded-4 shadow">
@@ -488,11 +492,9 @@
         <p class="text-muted mb-4">เลขที่เอกสาร: <strong id="successLogNo" class="text-primary fs-5"></strong></p>
         
         <div class="d-grid gap-2 col-11 mx-auto">
-          <!-- ปุ่มที่ 1: เปิด PDF -->
           <a id="btnOpenPdf" href="#" target="_blank" class="btn btn-danger btn-lg fw-bold shadow-sm">
             <i class="bi bi-file-earmark-pdf-fill me-2"></i>เปิด PDF เอกสาร
           </a>
-          <!-- ปุ่มที่ 2: กลับไปทำรายการใหม่ -->
           <button type="button" class="btn btn-outline-secondary btn-lg fw-bold mt-2" onclick="resetAndReopenDisburse()">
             <i class="bi bi-arrow-counterclockwise me-2"></i>กลับไปทำรายการใหม่
           </button>
@@ -500,5 +502,9 @@
       </div>
     </div>
   </div>
-  </main>
 </div>
+
+<!-- JavaScript Module -->
+<script type="module" src="js/budget.js"></script>
+</body>
+</html>
