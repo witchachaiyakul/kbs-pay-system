@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบริหารจัดการกลุ่มงานงบประมาณ - โรงเรียนกาญจนาภิเษกวิทยาลัย กระบี่</title>
+
+    <!-- 1. Bootstrap 5, Bootstrap Icons, Google Fonts Sarabun และ Google Charts -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    </head>
+<body>
+
+<!-- Navbar ด้านบน -->
+<nav class="navbar navbar-expand-lg navbar-dark shadow-sm mb-4" style="background-color: var(--navy-dark); border-bottom: 2px solid var(--gold-accent);">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+    <span class="navbar-brand mb-0 h1 text-white">
+      <i class="bi bi-speedometer2 me-2" style="color: var(--gold-accent);"></i>ระบบบริหารจัดการกลุ่มงานงบประมาณ
+    </span>
+    
+    <div class="d-none align-items-center text-white" id="userHeaderProfile">
+      <img id="headerUserImg" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Profile" class="rounded-circle me-2" style="width: 38px; height: 38px; object-fit: cover; border: 2px solid var(--gold-accent);">
+      <div>
+        <div class="fw-bold small" id="headerUserName">Loading...</div>
+        <small class="text-white-50" style="font-size: 11px;" id="headerUserRole">ผู้ทำรายการ</small>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index: 1080;"></div>
+
+<!-- ==========================================================================
+     MAIN DASHBOARD
+     ========================================================================== -->
+<div id="mainDashboard" class="container">
+  <div class="header-banner">
+    <h1 class="brand-title">KBS</h1>
+    <p class="brand-subtitle">ระบบบริหารจัดการกลุ่มบริหารงานงบประมาณ โรงเรียนกาญจนาภิเษกวิทยาลัย กระบี่</p>
+  </div>
+
+  <div class="row g-3 text-center justify-content-center">
+    <div class="col-md-6 col-lg-3">
+      <div class="card menu-card h-100" onclick="showForm('kbsPay')">
+        <div class="icon-box"><i class="bi bi-file-earmark-text-fill"></i></div>
+        <h3>จัดทำเอกสารจัดซื้อจัดจ้าง</h3>
+        <p>ระบบพิมพ์เบิกและจัดการสัญญา</p>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card menu-card h-100" onclick="showForm('kbsbudget')">
+        <div class="icon-box"><i class="bi bi-pie-chart-fill"></i></div>
+        <h3>งานแผนโครงการ</h3>
+        <p>ตรวจสอบและแก้ไขงบประมาณ</p>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card menu-card h-100" onclick="showForm('kbsbudgetuse')">
+        <div class="icon-box"><i class="bi bi-file-earmark-text-fill"></i></div>
+        <h3>ตัดแผน</h3>
+        <p>ตรวจสอบวงเงินและตัดแผนงบประมาณ</p>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card menu-card h-100" onclick="showForm('kbslogno')">
+        <div class="icon-box"><i class="bi bi-file-earmark-text-fill"></i></div>
+        <h3>เลขที่ใบสั่งซื้อสั่งจ้าง</h3>
+        <p>ออกเลขและตรวจสอบข้อมูล</p>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card menu-card h-100" onclick="showForm('kbsparcelmanage')">
+        <div class="icon-box"><i class="bi bi-file-earmark-text-fill"></i></div>
+        <h3>การบริหารพัสดุ</h3>
+        <p>ออกเลข เบิกจ่าย</p>
+      </div>
+    </div>
+
+    </div>
+  </div>
+</div>

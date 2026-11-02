@@ -1,0 +1,427 @@
+<!-- ==========================================================================
+     MODULE 1: KBS PAY (จัดทำเอกสารจัดซื้อจัดจ้าง)
+     ========================================================================== -->
+<div id="kbsPay" class="form-container d-none container py-3">
+  <!-- ปุ่มย้อนกลับหน้าหลัก -->
+  <div class="btn-back mb-3" onclick="resetFormToMain()">
+    <i class="bi bi-arrow-left"></i> กลับหน้าหลัก
+  </div>
+
+  <main class="kbs-main">
+    <!-- แถบแสดงโปรไฟล์ LINE ในฟอร์ม -->
+    <div id="userInfoBar" class="user-info-bar d-none mb-4">
+      <div class="d-flex align-items-center gap-3">
+        <img id="userPicture" src="" alt="LINE Profile" class="profile-img">
+        <div>
+          <div>
+            <strong id="userName">กำลังดึงข้อมูล...</strong>
+            <span id="userRole" class="badge ms-1" style="background-color: var(--navy-primary, #1e3a8a); color: #fff;">-</span>
+          </div>
+          <small class="text-muted">ล็อกอินด้วย LINE</small>
+        </div>
+      </div>
+      <a href="?" target="_top" class="btn btn-outline-danger btn-sm">🚪 ออกจากระบบ</a>
+    </div>
+    
+    <div class="text-center mb-4">
+      <h2 class="h3 fw-bold text-navy mb-1">📑พิมพ์เอกสารเบิกจ่ายงานจัดซื้อจัดจ้าง</h2>
+      <div class="mx-auto" style="height: 3px; width: 120px; background-color: var(--gold-accent, #d4af37);"></div>
+    </div>
+    
+    <form id="kbsForm">
+      <!-- Hidden Inputs สำหรับรับค่าและจัดการระบบ -->
+      <input type="hidden" name="invoice_url" id="invoice_url">
+      <input type="hidden" name="date_req_hidden" id="date_req_hidden">
+      <input type="hidden" name="date_result_hidden" id="date_result_hidden">
+      <input type="hidden" name="date_announce_hidden" id="date_announce_hidden">
+      <input type="hidden" name="date_po_hidden" id="date_po_hidden">
+      <input type="hidden" name="date_delivery_hidden" id="date_delivery_hidden">
+      <input type="hidden" name="date_receive_hidden" id="date_receive_hidden">
+      <input type="hidden" name="row_number" id="row_number" value="0">
+
+<!-- Section 1: ข้อมูลจากงานแผน -->
+<div class="card-section">
+  <div class="card-section-header">
+    <i class="bi bi-search"></i> ข้อมูลจากงานแผน กรุณาตัดแผนกับครูด้าโอ้ดก่อน
+  </div>
+  <div class="card-body p-4">
+    <div class="mb-3">
+      <label class="form-label fw-bold">กรอกเลข นผ.2 <small class="text-muted fw-normal">(ถ้ายังไม่มี กรุณาส่งเอกสารให้ครูด้าโอ้ดตัดแผนก่อนเพื่อออกเลข)</small></label>
+      <div class="input-group">
+        <input type="text" id="logNoInput" name="LOG_NO" class="form-control fw-bold border-primary" required placeholder="พิมพ์เลข นผ.2 ที่นี่..." autocomplete="off">
+        <button type="button" id="btnSearchLog" onclick="searchBudgetInfo()" class="btn btn-navy px-4">
+          🔍 ค้นหาข้อมูล
+        </button>
+      </div>
+      <small id="searchStatus" class="text-muted d-block mt-1">* กรอกเลขแล้วคลิกปุ่ม "ค้นหาข้อมูล"</small>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">โครงการ</label>
+        <input type="text" name="project" id="project" class="form-control bg-light" readonly>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">กิจกรรม</label>
+        <input type="text" name="activities" id="activities" class="form-control bg-light" readonly>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">งบประมาณขอใช้ครั้งนี้</label>
+        <input type="text" name="quantity" id="quantity" class="form-control bg-light" readonly>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">วิธีการ</label>
+        <input type="text" name="method" id="method" class="form-control bg-light" readonly>
+      </div>
+      <div class="col-12">
+        <label class="form-label">รายละเอียด</label>
+        <textarea name="details" id="details" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">เหตุผลที่จะซื้อ/จ้าง (เพื่อ...)</label>
+        <input type="text" name="to" class="form-control" placeholder="ระบุเหตุผลความจำเป็น..." required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">กำหนดการส่งมอบภายใน (วัน)</label>
+        <input type="number" name="delivery_days" id="deliveryDays" class="form-control" value="7" min="1" oninput="updateDateCalculation()">
+      </div>
+      <div class="col-12">
+        <label class="form-label">ฝ่าย/งาน</label>
+        <select name="division" id="division" class="form-select" required>
+          <option value="" disabled selected>--- เลือกฝ่าย/งาน ---</option>
+          <option value="บริหารทั่วไป">บริหารทั่วไป</option>
+          <option value="บุคคล">บุคคล</option>
+          <option value="วิชาการ">วิชาการ</option>
+          <option value="งบประมาณ">งบประมาณ</option>
+          <option value="กิจการนักเรียน">กิจการนักเรียน</option>
+          <option value="หอพัก">หอพัก</option>
+          <option value="โครงการห้องเรียนกีฬา">โครงการห้องเรียนกีฬา</option>
+        </select>
+      </div>
+
+      <!-- ➕ เพิ่มส่วน ผู้ขอซื้อ และ ตำแหน่งผู้ขอซื้อ หลังฝ่าย/งาน -->
+      <div class="col-md-6">
+        <label class="form-label fw-bold">ผู้ขอซื้อ/ขอจ้าง <small class="text-muted"></small></label>
+        <input type="text" id="buyer" name="buyer" class="form-control" list="committee_list" placeholder="พิมพ์หรือเลือกชื่อผู้ขอซื้อ..." onchange="autoFillBuyerPos()" required autocomplete="off">
+        <datalist id="committee_list"></datalist>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-bold">ตำแหน่งผู้ขอซื้อ <small class="text-muted"></small></label>
+        <input type="text" id="pos_buyer" name="pos_buyer" class="form-control bg-light" placeholder="ตำแหน่งจะดึงมาให้อัตโนมัติ" readonly>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 🎯 ช่องแสดงเลข PO/WO ต่อจากตำแหน่งผู้ขอซื้อ -->
+<div class="col-md-6 mb-3">
+  <label for="po_no_display" class="form-label fw-bold">เลขที่ใบสั่งซื้อ/สั่งจ้าง:</label>
+  <input type="text" id="po_no_display" class="form-control bg-light fw-bold text-primary" readonly placeholder="(ระบบจะออกเลขอัตโนมัติเมื่อกดบันทึก)">
+  
+  <!-- Hidden Fields สำหรับดึงค่าเดิมกลับไปบันทึกเมื่อแก้ไข -->
+  <input type="hidden" id="po_no_hidden" name="po_no_hidden">
+  <input type="hidden" id="po_base_no_hidden" name="po_base_no_hidden">
+  <input type="hidden" id="po_sub_no_hidden" name="po_sub_no_hidden">
+  <input type="hidden" id="po_year_be_hidden" name="po_year_be_hidden">
+</div>
+
+      <!-- Upload Box -->
+      <div class="upload-box mb-4">
+        <h5 class="fw-bold text-navy mb-3"><i class="bi bi-cloud-upload me-2"></i>อัปโหลด ใบส่งของ / ใบกำกับภาษี</h5>
+        <div class="row g-2 justify-content-center align-items-center">
+          <div class="col-md-6">
+            <input type="file" id="fileInput" class="form-control" accept="image/*, application/pdf">
+          </div>
+          <div class="col-md-auto">
+            <button type="button" id="scanBtn" class="btn btn-navy px-4" onclick="handleScan()">📸 สแกนและกรอกข้อมูลอัตโนมัติ</button>
+          </div>
+        </div>
+        <small id="uploadStatus" class="text-muted d-block mt-2"></small>
+      </div>
+
+<!-- Section: สืบราคาท้องตลาดจาก -->
+<div class="card-section mb-4">
+  <div class="card-section-header">
+    <i class="bi bi-search"></i> สืบราคาท้องตลาดจาก
+  </div>
+  <div class="card-body p-4">
+    <div class="alert alert-warning py-2 px-3 border-start border-4 border-warning mb-3">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>กรุณาระบุชื่อผู้เสนอราคาอีก 2 ราย</strong>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">ผู้เสนอราคารายที่ 2 <span class="text-danger">*</span></label>
+        <input type="text" id="seller2" name="seller2" class="form-control" placeholder="ระบุชื่อผู้เสนอราคารายที่ 2" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">ผู้เสนอราคารายที่ 3 <span class="text-danger">*</span></label>
+        <input type="text" id="seller3" name="seller3" class="form-control" placeholder="ระบุชื่อผู้เสนอราคารายที่ 3" required>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: ข้อมูลใบส่งของ / ใบกำกับภาษี -->
+<div class="card-section">
+  <div class="card-section-header">
+    <i class="bi bi-receipt"></i> กรอกข้อมูลใบส่งของ/ใบกำกับภาษี หรืออื่นๆ
+  </div>
+  <div class="card-body p-4">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">ค้นหาร้านค้า</label>
+        <input type="text" id="seller_name_search" class="form-control" placeholder="พิมพ์ชื่อร้านค้าเพื่อค้นหา" list="seller_list" autocomplete="off">
+        <datalist id="seller_list"></datalist>
+        <small id="seller_search_status" class="text-muted d-block mt-1">พิมพ์ชื่อร้านค้าอย่างน้อย 2 ตัวอักษร</small>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">ชื่อผู้ขายหรือผู้รับจ้าง/กรอกเอง <span class="text-danger">*</span></label>
+        <input type="text" id="seller_name" name="seller_name" class="form-control bg-light" required readonly>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">เลขประจำตัวผู้เสียภาษี (บุคคลธรรมดาใช้เลขบัตรประชาชน)</label>
+        <input type="text" id="tax_id" name="tax_id" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">เบอร์โทรศัพท์</label>
+        <input type="text" id="tel_no" name="tel_no" class="form-control">
+      </div>
+
+      <!-- ที่อยู่ร้านค้า -->
+      <div class="col-md-3"><label class="form-label">เลขที่</label><input type="text" id="address_no" name="address_no" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">หมู่ที่</label><input type="text" id="address_moo" name="address_moo" class="form-control"></div>
+      <div class="col-md-6"><label class="form-label">ถนน</label><input type="text" id="address_road" name="address_road" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label">ตำบล/แขวง</label><input type="text" id="address_subdistrict" name="address_subdistrict" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label">อำเภอ/เขต</label><input type="text" id="address_district" name="address_district" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label">จังหวัด</label><input type="text" id="address_province" name="address_province" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label">รหัสไปรษณีย์</label><input type="text" id="zip_code" name="zip_code" class="form-control"></div>
+      <div class="col-md-8"><label class="form-label">ชื่อผู้เสนอราคา</label><input type="text" id="bidder_name" name="bidder_name" class="form-control"></div>
+
+      <div class="col-12"><hr class="my-2"></div>
+
+      <div class="col-md-6">
+        <label class="form-label">ประเภทเอกสาร (Invoice Type)</label>
+        <input type="text" name="invoice_type" id="invoice_type" class="form-control" list="inv_type_list" placeholder="เลือกหรือพิมพ์..." autocomplete="off">
+        <datalist id="inv_type_list"></datalist>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">วันที่เอกสาร (Date)</label>
+        <input type="date" id="doc_date" name="doc_date" class="form-control" onchange="updateDateCalculation();">
+      </div>
+      <div class="col-md-6"><label class="form-label">เลขที่ (No.)</label><input type="text" name="doc_no" class="form-control" placeholder="เลขที่เอกสาร"></div>
+      <div class="col-md-6"><label class="form-label">เล่มที่ (Book No.)</label><input type="text" name="book_no" class="form-control" placeholder="ระบุเล่มที่ (ถ้ามี)"></div>
+    </div>
+  </div>
+</div>
+
+      <!-- Section 3: รายการพัสดุ -->
+      <div class="card-section">
+        <div class="card-section-header">
+          <i class="bi bi-list-check"></i> รายการพัสดุ/จัดจ้าง (1-29)
+        </div>
+        <div class="card-body p-4">
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle item-table mb-3">
+              <thead>
+                <tr>
+                  <th style="width: 5%;">#</th>
+                  <th style="width: 55%;">รายการ</th>
+                  <th style="width: 10%;">จำนวน</th>
+                  <th style="width: 10%;">หน่วย</th>
+                  <th style="width: 10%;">ราคา/หน่วย</th>
+                  <th style="width: 10%;">จำนวนเงิน</th>
+                </tr>
+              </thead>
+              <tbody id="itemListBody"></tbody>
+            </table>
+          </div>
+
+          <div class="text-center">
+            <button type="button" id="btnAddRows" class="btn btn-outline-navy px-4" onclick="addRowBatch()">
+              + เพิ่มรายการ (ทีละ 5)
+            </button>
+            <div id="rowLimitMsg" class="text-muted small mt-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: คำนวณยอดเงิน -->
+      <div class="card-section">
+        <div class="card-section-header">
+          <i class="bi bi-calculator"></i> คำนวณและตรวจสอบยอดเงิน
+        </div>
+        <div class="card-body p-4">
+          <div class="mb-4 text-center">
+            <label class="form-label fw-bold d-block mb-2">เลือกประเภทภาษี (VAT 7%)</label>
+            <div class="btn-group" role="group">
+              <input type="radio" class="btn-check" name="vat_type" id="vat_none" value="no_vat" checked onchange="calculateTotals()">
+              <label class="btn btn-outline-primary" for="vat_none">ไม่มี Vat 7%</label>
+
+              <input type="radio" class="btn-check" name="vat_type" id="vat_ex" value="ex_vat" onchange="calculateTotals()">
+              <label class="btn btn-outline-primary" for="vat_ex">Ex Vat 7% (แยกนอก)</label>
+
+              <input type="radio" class="btn-check" name="vat_type" id="vat_in" value="in_vat" onchange="calculateTotals()">
+              <label class="btn btn-outline-primary" for="vat_in">In Vat 7% (รวมใน)</label>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">รวมเป็นเงิน</label><input type="text" id="cal_subtotal" name="cal_subtotal" class="form-control text-end bg-light" readonly></div>
+            <div class="col-md-4"><label class="form-label">ภาษีมูลค่าเพิ่ม</label><input type="text" id="cal_vat" name="cal_vat" class="form-control text-end bg-light" readonly></div>
+            <div class="col-md-4"><label class="form-label fw-bold">รวมเป็นเงินทั้งสิ้น</label><input type="text" id="cal_grandtotal" class="form-control text-end fw-bold text-primary" style="background-color: #e0f0ff;" data-value="0.00" readonly></div>
+            
+            <div class="col-md-4"><label class="form-label">มูลค่าสินค้า</label><input type="text" id="cal_value" name="cal_value" class="form-control text-end bg-light" readonly></div>
+            <div class="col-md-4"><label class="form-label text-danger fw-bold">หัก ภาษีเงินได้</label><input type="text" id="cal_income_tax" name="cal_income_tax" class="form-control text-end bg-light text-danger fw-bold" readonly></div>
+            <div class="col-md-4"><label class="form-label text-success fw-bold">คงเหลือจ่ายจริง</label><input type="text" id="cal_act_paid" name="cal_act_paid" class="form-control text-end bg-light text-success fw-bold" readonly></div>
+          </div>
+
+          <div class="text-center mt-4">
+            <button type="button" class="btn btn-warning fw-bold px-4 shadow-sm" onclick="validateBudget()">✨ ตรวจสอบยอดรวมกับงบที่ขอใช้</button>
+            <small id="validationMessage" class="d-block mt-2 fw-bold"></small>
+          </div>
+        </div>
+      </div>
+
+ <!-- Section 5: กำหนดการและคณะกรรมการตรวจรับ -->
+<div class="card-section">
+  <div class="card-section-header">
+    <i class="bi bi-calendar-event"></i> กำหนดการและคณะกรรมการตรวจรับ
+  </div>
+  <div class="card-body p-4">
+    <h6 class="text-center fw-bold mb-3">📅 วันที่เอกสารที่คำนวณโดยมี วันที่เอกสาร <strong id="refDateDisplay" class="text-danger">...</strong> เป็นหลัก</h6>
+    
+    <div class="table-responsive mb-4">
+      <table class="table table-bordered date-summary-table align-middle">
+        <tbody>
+          <!-- ➕ 1. วันที่ ขออนุมัติจัดซื้อ -->
+          <tr>
+            <th>1. วันที่ ขออนุมัติจัดซื้อ <small class="text-muted"></small></th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_memo_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_memo_picker').showPicker()">
+                <input type="date" id="date_memo_picker" class="d-none" onchange="syncDateBE(this, 'date_memo_display'); document.getElementById('date_memo_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- ➕ 2. วันที่ ขออนุมัติแต่งตั้งคณะกรรมการ -->
+          <tr>
+            <th>2. วันที่ ขออนุมัติแต่งตั้งคณะกรรมการ <small class="text-muted"></small></th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_ctor_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_ctor_picker').showPicker()">
+                <input type="date" id="date_ctor_picker" class="d-none" onchange="syncDateBE(this, 'date_ctor_display'); document.getElementById('date_ctor_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- ➕ 3. วันที่ รายงานผลตรวจร่าง TOR -->
+          <tr>
+            <th>3. วันที่ รายงานผลตรวจร่าง TOR <small class="text-muted"></small></th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_tor_rp_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_tor_rp_picker').showPicker()">
+                <input type="date" id="date_tor_rp_picker" class="d-none" onchange="syncDateBE(this, 'date_tor_rp_display'); document.getElementById('date_tor_rp_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 4. วันที่ รายงานขอซื้อหรือจ้าง / ใบเสนอราคา -->
+          <tr>
+            <th>4. วันที่ รายงานขอซื้อหรือจ้าง / ใบเสนอราคา</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_req_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_req_picker').showPicker()">
+                <input type="date" id="date_req_picker" class="d-none" onchange="syncDateBE(this, 'date_req_display'); document.getElementById('date_req_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 5. วันที่ รายงานผลการพิจารณาและขออนุมัติ -->
+          <tr>
+            <th>5. วันที่ รายงานผลการพิจารณาและขออนุมัติ</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_result_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_result_picker').showPicker()">
+                <input type="date" id="date_result_picker" class="d-none" onchange="syncDateBE(this, 'date_result_display'); document.getElementById('date_result_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 6. วันที่ ประกาศผู้ชนะการเสนอราคา -->
+          <tr>
+            <th>6. วันที่ ประกาศผู้ชนะการเสนอราคา</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_announce_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_announce_picker').showPicker()">
+                <input type="date" id="date_announce_picker" class="d-none" onchange="syncDateBE(this, 'date_announce_display'); document.getElementById('date_announce_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 7. วันที่ ใบสั่งซื้อหรือใบสั่งจ้าง (PO) -->
+          <tr>
+            <th>7. วันที่ ใบสั่งซื้อหรือใบสั่งจ้าง</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_po_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_po_picker').showPicker()">
+                <input type="date" id="date_po_picker" class="d-none" onchange="syncDateBE(this, 'date_po_display'); document.getElementById('date_po_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 8. กำหนดส่งมอบพัสดุหรืองานจ้าง -->
+          <tr>
+            <th>8. กำหนดส่งมอบพัสดุหรืองานจ้าง</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_delivery_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_delivery_picker').showPicker()">
+                <input type="date" id="date_delivery_picker" class="d-none" onchange="syncDateBE(this, 'date_delivery_display'); document.getElementById('date_delivery_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+          <!-- 9. วันที่ ใบตรวจรับพัสดุ -->
+          <tr>
+            <th>9. วันที่ ใบตรวจรับพัสดุ</th>
+            <td>
+              <div class="position-relative d-flex align-items-center">
+                <input type="text" id="date_receive_display" class="form-control" placeholder="วว/ดด/พ.ศ." onclick="document.getElementById('date_receive_picker').showPicker()">
+                <input type="date" id="date_receive_picker" class="d-none" onchange="syncDateBE(this, 'date_receive_display'); document.getElementById('date_receive_hidden').value = this.value;">
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Hidden Inputs สำหรับส่งค่า YYYY-MM-DD ไปใช้งานฝั่ง Script -->
+    <input type="hidden" name="date_memo_hidden" id="date_memo_hidden">
+    <input type="hidden" name="date_ctor_hidden" id="date_ctor_hidden">
+    <input type="hidden" name="date_tor_rp_hidden" id="date_tor_rp_hidden">
+    <input type="hidden" name="date_req_hidden" id="date_req_hidden">
+    <input type="hidden" name="date_result_hidden" id="date_result_hidden">
+    <input type="hidden" name="date_announce_hidden" id="date_announce_hidden">
+    <input type="hidden" name="date_po_hidden" id="date_po_hidden">
+    <input type="hidden" name="date_delivery_hidden" id="date_delivery_hidden">
+    <input type="hidden" name="date_receive_hidden" id="date_receive_hidden">
+
+          <hr class="my-4">
+
+          <h5 class="text-center fw-bold text-navy mb-1"><i class="bi bi-people-fill me-1"></i>คณะกรรมการตรวจรับ</h5>
+          <small class="d-block text-center text-danger mb-3">* สามารถคลิกพิมพ์เพื่อเปลี่ยนรายชื่อกรรมการและดึงตำแหน่งจากฐานข้อมูล</small>
+          
+          <div id="committee_container" class="mt-3"></div>
+        </div>
+      </div>
+      
+      <!-- Container แจ้งเตือนข้อความระบบ -->
+      <div role="alert" class="mt-4">
+        <div id="message" class="text-center"></div>
+      </div>
+
+      <!-- ปุ่มกดบันทึกและพิมพ์ -->
+      <div class="text-center mt-4 mb-5">
+        <button type="button" id="saveBtn" onclick="submitForm()" class="btn btn-navy btn-lg px-5 shadow">
+          💾 บันทึกและสร้าง PDF
+        </button>
+        <button type="button" id="printBtn" class="btn btn-secondary btn-lg ms-2" style="display: none;" onclick="window.print()">
+          🖨️ พิมพ์เอกสาร PDF
+        </button>
+      </div>
+    </form>
+  </main>
+</div>

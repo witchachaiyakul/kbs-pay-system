@@ -1,0 +1,141 @@
+<!-- ============================================================================
+     📦 MODULE: การบริหารพัสดุ (KBS PARCEL MANAGEMENT)
+============================================================================ -->
+<div id="kbsparcelmanage" class="container-fluid py-3" style="display: none;">
+  <!-- Header Bar -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="btn-back" onclick="showForm('dashboard')">
+      <i class="bi bi-arrow-left-circle-fill fs-4"></i>
+      <span>กลับหน้าหลัก</span>
+    </div>
+    <h4 class="fw-bold text-navy m-0"><i class="bi bi-box-seam-fill me-2 text-warning"></i>ระบบบริหารจัดการพัสดุ</h4>
+    <div></div>
+  </div>
+
+  <!-- Search & Filter Card -->
+  <div class="card card-section p-3 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">ค้นหาด้วยเลข นผ.2</label>
+        <div class="input-group">
+          <input type="text" id="parcelSearchLogNo" class="form-control" placeholder="เช่น นผ205690049">
+          <button class="btn btn-navy" type="button" onclick="loadParcelDataFromLogPay()">
+            <i class="bi bi-search"></i> ค้นหา
+          </button>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">กรองตามฝ่าย/กลุ่มสาระ</label>
+        <select id="parcelFilterDivision" class="form-select" onchange="filterParcelTable()">
+          <option value="">-- ทุกฝ่าย --</option>
+          <option value="กลุ่มบริหารงานงบประมาณ">กลุ่มบริหารงานงบประมาณ</option>
+          <option value="กลุ่มบริหารงานวิชาการ">กลุ่มบริหารงานวิชาการ</option>
+          <option value="กลุ่มบริหารงานทั่วไป">กลุ่มบริหารงานทั่วไป</option>
+          <option value="กลุ่มบริหารงานบุคคล">กลุ่มบริหารงานบุคคล</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">สถานะพัสดุ</label>
+        <select id="parcelFilterStatus" class="form-select" onchange="filterParcelTable()">
+          <option value="">-- ทุกสถานะ --</option>
+          <option value="pending">รอออกเลขพัสดุ</option>
+          <option value="registered">ออกเลขพัสดุแล้ว</option>
+          <option value="issued">เบิกจ่ายแล้ว</option>
+        </select>
+      </div>
+      <div class="col-md-3 text-end">
+        <button class="btn btn-outline-secondary" onclick="loadParcelDataFromLogPay(true)">
+          <i class="bi bi-arrow-clockwise"></i> รีเฟรชข้อมูล
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Bar: ออกเลข & เบิกจ่าย -->
+  <div class="card card-section p-3 mb-3 bg-light border-navy">
+    <div class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <label class="form-label mb-1 fw-bold">1. เลือกประเภทเงิน (Fund Type)</label>
+        <select id="parcelFundType" class="form-select form-select-sm">
+          <option value="งบประมาณ">งบประมาณ (บม.)</option>
+          <option value="เงินนอกงบประมาณ">เงินนอกงบประมาณ (นบ.)</option>
+          <option value="เงินบริจาค">เงินบริจาค (บร.)</option>
+          <option value="เงินรายได้สถานศึกษา">เงินรายได้สถานศึกษา (รด.)</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 fw-bold">2. ปีงบประมาณ</label>
+        <input type="number" id="parcelYearBE" class="form-control form-control-sm text-center" value="2569">
+      </div>
+      <div class="col-md-7 text-end pt-3">
+        <button class="btn btn-success me-2" onclick="confirmGenerateParcelIDs()">
+          <i class="bi bi-barcode"></i> ออกเลขพัสดุที่เลือก (<span id="selectedCountReg">0</span>)
+        </button>
+        <button class="btn btn-warning" onclick="openIssueModal()">
+          <i class="bi bi-box-arrow-right"></i> เบิกจ่ายพัสดุที่เลือก (<span id="selectedCountIssue">0</span>)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parcel Items Table -->
+  <div class="card card-section p-0">
+    <div class="card-section-header">
+      <i class="bi bi-list-check"></i> รายการพัสดุที่แตกแถวตามจำนวน (Expanded Parcels)
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered align-middle m-0" id="parcelTable">
+        <thead class="table-navy text-center">
+          <tr>
+            <th style="width: 3%;"><input type="checkbox" id="selectAllParcels" onchange="toggleSelectAllParcels(this)"></th>
+            <th style="width: 10%;">เลข นผ.2</th>
+            <th style="width: 12%;">ฝ่ายที่รับผิดชอบ</th>
+            <th style="width: 8%;">วันตรวจรับ (CR)</th>
+            <th style="width: 25%;">รายการพัสดุ</th>
+            <th style="width: 6%;">ชิ้นที่</th>
+            <th style="width: 8%;">ราคา/หน่วย</th>
+            <th style="width: 6%;">หน่วย</th>
+            <th style="width: 12%;">เลขพัสดุที่ได้รับ</th>
+            <th style="width: 10%;">สถานะ / ผู้รับเบิก</th>
+          </tr>
+        </thead>
+        <tbody id="parcelTableBody">
+          <tr>
+            <td colspan="10" class="text-center py-4 text-muted">
+              กรุณากรอกเลข นผ.2 หรือกดค้นหาเพื่อโหลดรายการพัสดุ
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal เลือกผู้รับเบิกพัสดุ -->
+<div class="modal fade" id="issueParcelModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-navy text-white">
+        <h5 class="modal-title"><i class="bi bi-person-check-fill me-2"></i>บันทึกการเบิกจ่ายพัสดุ</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-bold">เลือกผู้รับเบิก (จากคณะกรรมการ/ผู้ขอซื้อ)</label>
+          <select id="issueRecipientSelect" class="form-select mb-2" onchange="syncRecipientInput(this)">
+            <option value="">-- เลือกจากรายชื่อกรรมการ --</option>
+          </select>
+          <input type="text" id="issueRecipientCustom" class="form-control" placeholder="หรือพิมพ์ชื่อ-นามสกุล ผู้รับเบิก">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">วันที่เบิกจ่าย</label>
+          <input type="date" id="issueDateInput" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-warning" onclick="executeIssueParcels()">ยืนยันการเบิกจ่าย</button>
+      </div>
+    </div>
+  </div>
+</div>
