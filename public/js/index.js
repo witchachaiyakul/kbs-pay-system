@@ -201,6 +201,8 @@ window.showForm = function(sectionId) {
         window.loadBudgetUseData();
     } else if (sectionId === 'kbsparcelmanage' && typeof window.loadParcelDataFromLogPay === 'function') {
         window.loadParcelDataFromLogPay(true);
+    } else if (sectionId === 'kbsUserManage' && typeof window.loadUsersTable === 'function') {
+    window.loadUsersTable();
     }
 };
 

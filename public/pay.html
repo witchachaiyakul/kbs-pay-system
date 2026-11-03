@@ -115,7 +115,7 @@
       <!-- ➕ เพิ่มส่วน ผู้ขอซื้อ และ ตำแหน่งผู้ขอซื้อ หลังฝ่าย/งาน -->
       <div class="col-md-6">
         <label class="form-label fw-bold">ผู้ขอซื้อ/ขอจ้าง <small class="text-muted"></small></label>
-        <input type="text" id="buyer" name="buyer" class="form-control" list="committee_list" placeholder="พิมพ์หรือเลือกชื่อผู้ขอซื้อ..." onchange="autoFillBuyerPos()" required autocomplete="off">
+        <input type="text" id="buyer" name="buyer" class="form-control" list="committee_list" placeholder="พิมพ์หรือเลือกชื่อผู้ขอซื้อ..." onchange="autoFillBuyerPos()" oninput="autoFillBuyerPos()" required autocomplete="off">
         <datalist id="committee_list"></datalist>
       </div>
       <div class="col-md-6">
@@ -220,7 +220,7 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">วันที่เอกสาร (Date)</label>
-        <input type="date" id="doc_date" name="doc_date" class="form-control" onchange="updateDateCalculation();">
+        <input type="date" id="doc_date" name="doc_date" class="form-control" onchange="updateDateCalculation();" oninput="updateRefDateDisplayOnly(); updateDateCalculation();">
       </div>
       <div class="col-md-6"><label class="form-label">เลขที่ (No.)</label><input type="text" name="doc_no" class="form-control" placeholder="เลขที่เอกสาร"></div>
       <div class="col-md-6"><label class="form-label">เล่มที่ (Book No.)</label><input type="text" name="book_no" class="form-control" placeholder="ระบุเล่มที่ (ถ้ามี)"></div>

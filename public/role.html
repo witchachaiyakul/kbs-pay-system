@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการสิทธิ์ผู้ใช้งาน - KBS USER ROLE</title>
+
+  <!-- 1. Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- 2. Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- 3. Custom CSS หลักของระบบ -->
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<!-- ============================================================================
+     👥 MODULE: จัดการสิทธิ์ผู้ใช้งาน (KBS USER ROLE MANAGEMENT)
+============================================================================ -->
+<div id="kbsUserManage" class="form-container container py-3">
+  <!-- ปุ่มย้อนกลับหน้าหลัก -->
+  <div class="btn-back mb-3" onclick="resetFormToMain()">
+    <i class="bi bi-arrow-left"></i>
+    <span>กลับหน้าหลัก Dashboard</span>
+  </div>
+
+  <main class="kbs-main p-4 p-md-5 rounded-3 bg-white shadow-sm border">
+    <!-- Header Banner -->
+    <div class="text-center mb-4">
+      <h2 class="h3 fw-bold text-navy mb-1">
+        <i class="bi bi-shield-lock-fill me-2 text-warning"></i>ระบบจัดการสิทธิ์ผู้ใช้งาน
+      </h2>
+      <p class="text-muted small">กำหนดระดับสิทธิ์ (Admin / Officer / Staff) ให้แก่บุคลากรในโรงเรียน</p>
+      <div class="mx-auto" style="height: 3px; width: 140px; background-color: var(--gold-accent, #d4af37);"></div>
+    </div>
+
+    <!-- User Management Table Card -->
+    <div class="card card-section p-0">
+      <div class="card-section-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people me-2"></i>รายชื่อผู้ใช้งานและสิทธิ์เข้าถึงระบบ</span>
+        <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" onclick="loadUsersTable()">
+          <i class="bi bi-arrow-clockwise me-1"></i> รีเฟรชข้อมูล
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle m-0 text-center">
+          <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
+            <tr class="small align-middle">
+              <th style="width: 5%;">#</th>
+              <th style="width: 25%;">ชื่อ-นามสกุล</th>
+              <th style="width: 25%;">ตำแหน่ง</th>
+              <th style="width: 20%;">ระดับสิทธิ์ (Role)</th>
+              <th style="width: 13%;">สถานะ</th>
+              <th style="width: 12%;">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="userManagementTableBody">
+            <tr>
+              <td colspan="6" class="py-4 text-muted">
+                <i class="bi bi-inbox fs-2 d-block mb-2"></i>กดปุ่มรีเฟรช หรือรอโหลดข้อมูลผู้ใช้งาน...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- JavaScript Module -->
+<script type="module" src="js/role.js"></script>
+</body>
+</html>
