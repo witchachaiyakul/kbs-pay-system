@@ -158,7 +158,8 @@
     <i class="bi bi-search"></i> สืบราคาท้องตลาดจาก
   </div>
   <div class="card-body p-4">
-    <div class="alert alert-warning py-2 px-3 border-start border-4 border-warning mb-3">
+    <!-- 🎯 เพิ่ม id="seller23Alert" และ style="display: none;" -->
+    <div id="seller23Alert" class="alert alert-warning py-2 px-3 border-start border-4 border-warning mb-3" style="display: none;">
       <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>กรุณาระบุชื่อผู้เสนอราคาอีก 2 ราย</strong>
     </div>
     <div class="row g-3">
@@ -430,9 +431,6 @@
       <div class="text-center mt-4 mb-5">
         <button type="button" id="saveBtn" onclick="submitForm()" class="btn btn-navy btn-lg px-5 shadow">
           💾 บันทึกและสร้าง PDF
-        </button>
-        <button type="button" id="printBtn" class="btn btn-secondary btn-lg ms-2" style="display: none;" onclick="window.print()">
-          🖨️ พิมพ์เอกสาร PDF
         </button>
       </div>
     </form>

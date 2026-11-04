@@ -13,6 +13,12 @@
   
   <!-- 3. Custom CSS ของระบบ -->
   <link rel="stylesheet" href="css/main.css">
+
+  <!-- 4. Google Charts Loader (สำหรับวาด Donut Chart) -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <!-- 5. Bootstrap 5 JS Bundle (รวม Popper.js สำหรับ Modal) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
 
@@ -397,114 +403,7 @@
           </div>
         </div>
 
-        <!-- ส่วนที่ 2: ฟอร์มขออนุมัติตัดจ่าย -->
-        <div class="card border shadow-sm">
-          <div class="card-header bg-navy text-white fw-bold" style="background-color: var(--navy-primary, #1e3a8a);">
-            <i class="bi bi-pencil-square me-1" style="color: var(--gold-accent);"></i> กรอกข้อมูลขออนุมัติตัดจ่าย
-          </div>
-          <div class="card-body p-4 bg-white">
-            <form id="disburseForm">
-              <div class="row g-3">
-                
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">1. เพื่อดำเนินงาน</label>
-                  <select id="mdSelPurchase" class="form-select" required>
-                    <option value="ซื้อ">ซื้อ</option>
-                    <option value="จ้าง">จ้าง</option>
-                    <option value="เดินทางไปราชการ">เดินทางไปราชการ</option>
-                    <option value="จัดค่าย">จัดค่าย</option>
-                    <option value="เช่าเหมารถ">เช่าเหมารถ</option>
-                    <option value="ค่าจ้างครูและบุคลากรทางการศึกษา">ค่าจ้างครูและบุคลากรทางการศึกษา</option>
-                  </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">2. จำนวนเงินที่ขอตัดจ่าย (บาท)</label>
-                  <input type="number" id="mdInpAmount" class="form-control fw-bold border-primary" min="0.01" step="0.01" placeholder="0.00" oninput="calculateDisburseBalance()" required>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">3. ผู้ขอใช้งบประมาณ</label>
-                  <input type="text" id="mdSelCommittee" class="form-control" list="committee_list" placeholder="พิมพ์ชื่อเพื่อค้นหา..." autocomplete="off" required>
-                  <datalist id="committee_list"></datalist>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">4. รายรายละเอียด</label>
-                  <textarea id="mdInpRemark" class="form-control" rows="2" placeholder="ระบุเหตุผลความจำเป็นหรือรายละเอียด..."></textarea>
-                </div>
-
-              </div>
-
-              <!-- กล่องสรุปการคำนวณเงิน Real-time -->
-              <div class="mt-4 p-3 rounded-3 bg-light border">
-                <div class="d-flex justify-content-between mb-1">
-                  <span>งบประมาณที่ได้รับจัดสรร:</span>
-                  <strong id="calcTotalBudget" class="text-dark">0.00 ฿</strong>
-                </div>
-                <div class="d-flex justify-content-between mb-1">
-                  <span>ใช้ไปแล้ว:</span>
-                  <strong id="calcUsedBudget" class="text-danger">0.00 ฿</strong>
-                </div>
-                <div class="d-flex justify-content-between mb-1">
-                  <span>คงเหลือ:</span>
-                  <strong id="calcBeforeRemain" class="text-primary">0.00 ฿</strong>
-                </div>
-                <div class="d-flex justify-content-between mb-1">
-                  <span>จำนวนเงินขอใช้ครั้งนี้:</span>
-                  <strong id="calcReqAmount" class="text-danger">0.00 ฿</strong>
-                </div>
-                <div class="d-flex justify-content-between fs-5 fw-bold pt-2 border-top">
-                  <span>คงเหลือสุทธิหลังตัด:</span>
-                  <strong id="calcAfterRemain" class="text-success">0.00 ฿</strong>
-                </div>
-
-                <div id="alertOverBudget" class="alert alert-danger d-none mt-3 mb-0 text-center fw-bold">
-                  <i class="bi bi-exclamation-triangle-fill me-2"></i>คำเตือน: ยอดเงินขอตัดจ่ายเกินวงเงินคงเหลือ (ติดลบ <span id="overAmount">0.00</span> บาท) ไม่สามารถอนุมัติได้!
-                </div>
-              </div>
-
-            </form>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="modal-footer bg-white border-top justify-content-between">
-        <button type="button" class="btn btn-secondary px-4 fw-semibold" data-bs-dismiss="modal">ยกเลิก</button>
-        <button type="button" id="btnSubmitDisburseDoc" class="btn btn-navy px-5 fw-bold shadow" onclick="submitDisbursePlanDoc()">
-          <i class="bi bi-file-earmark-check-fill me-1"></i> ยืนยันและสร้างเอกสาร
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal แจ้งเตือนเมื่อตัดแผนสำเร็จ -->
-<div class="modal fade" id="disburseSuccessModal" data-bs-backdrop="static" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-center p-4 rounded-4 shadow">
-      <div class="modal-body">
-        <div class="text-success display-1 mb-2">
-          <i class="bi bi-check-circle-fill"></i>
-        </div>
-        <h3 class="fw-bold text-dark mb-1">ตัดแผนสำเร็จ!</h3>
-        <p class="text-muted mb-4">เลขที่เอกสาร: <strong id="successLogNo" class="text-primary fs-5"></strong></p>
-        
-        <div class="d-grid gap-2 col-11 mx-auto">
-          <a id="btnOpenPdf" href="#" target="_blank" class="btn btn-danger btn-lg fw-bold shadow-sm">
-            <i class="bi bi-file-earmark-pdf-fill me-2"></i>เปิด PDF เอกสาร
-          </a>
-          <button type="button" class="btn btn-outline-secondary btn-lg fw-bold mt-2" onclick="resetAndReopenDisburse()">
-            <i class="bi bi-arrow-counterclockwise me-2"></i>กลับไปทำรายการใหม่
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- JavaScript Module -->
+<!-- JavaScript Module ของระบบ -->
 <script type="module" src="js/budget.js"></script>
 </body>
 </html>

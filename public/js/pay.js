@@ -19,11 +19,27 @@ const INTERNAL_SECRET_KEY = "witchachaiyakul"; // 🔑 รหัสลับส�
 
 // 🎯 โหลด Master Data (รวมถึงรายชื่อลง datalist) ทันทีที่ DOM พร้อมทำงาน
 document.addEventListener("DOMContentLoaded", () => {
+    // 🎯 1. โหลดข้อมูล Master Data ของระบบ
     if (typeof loadKbsPayMasterData === 'function') {
         loadKbsPayMasterData();
     }
-});
 
+    // 🎯 2. ผูก Event Listener ตรวจสอบผู้เสนอราคาแบบ Real-time (เพื่อซ่อน/แสดงกล่องเตือน)
+    const s2Input = document.getElementById('seller2');
+    const s3Input = document.getElementById('seller3');
+
+    if (s2Input) {
+        s2Input.addEventListener('input', checkSellerValidation);
+    }
+    if (s3Input) {
+        s3Input.addEventListener('input', checkSellerValidation);
+    }
+
+    // 🎯 3. เช็กสถานะการแสดงผลกล่องเตือนทันทีหลังจากโหลดหน้าเว็บเสร็จ
+    if (typeof checkSellerValidation === 'function') {
+        checkSellerValidation();
+    }
+});
 // ============================================================================
 // 🔍 1. ค้นหาข้อมูลจาก FIRESTORE (log_pay ก่อน -> แล้วค่อย log_budget)
 // ============================================================================
@@ -82,15 +98,9 @@ export async function searchBudgetInfo() {
     window.currentBudget = null; 
 
     try {
-        // =========================================================================
-        // 1. ค้นหาใน log_pay และ log_budget ตามลำดับระบบเดิม
-        // =========================================================================
         const payData = await fetchDocFromFirestore("log_pay", logNo);
         const budgetData = await fetchDocFromFirestore("log_budget", logNo);
 
-        // =========================================================================
-        // 2. ดึงข้อมูล Master Plan จาก budget_plans (ถ้ามี project_id)
-        // =========================================================================
         let planData = null;
         const projectId = (budgetData && budgetData.project_id) || (payData && payData.project_id);
         if (projectId) {
@@ -99,9 +109,6 @@ export async function searchBudgetInfo() {
 
         let res = null;
 
-        // =========================================================================
-        // 3. กรณีพบใน log_pay (เคยพิมพ์เบิกจ่ายแล้ว)
-        // =========================================================================
         if (payData) {
             const addr = payData.seller_address || {};
             const fin = payData.financial || {};
@@ -123,7 +130,6 @@ export async function searchBudgetInfo() {
                 pr_type: item.pr_type || 'ซื้อ'
             })) : [];
 
-            // แกะเมทาดาตาของ PO เดิม
             const poNoStr = payData.po_no || '';
             let poBaseNo = Number(payData.po_base_no || payData.base_no) || 0;
             let poSubNo = Number(payData.po_sub_no || payData.sub_no) || 0;
@@ -194,9 +200,6 @@ export async function searchBudgetInfo() {
                 }
             };
         } 
-        // =========================================================================
-        // 4. กรณีพบเฉพาะใน log_budget (ผ่านการตัดแผนแล้ว แต่ยังไม่เคยพิมพ์เบิกจ่าย)
-        // =========================================================================
         else if (budgetData) {
             res = {
                 success: true,
@@ -210,50 +213,18 @@ export async function searchBudgetInfo() {
                     budget_use: budgetData.budget_use || budgetData.request || budgetData.amount || '0.00',
                     method: budgetData.method || budgetData.วิธีการ || '',
                     details: budgetData.details || budgetData.รายละเอียด || '',
-                    buyer: '',
-                    pos_buyer: '',
-                    memo_date: '',
-                    ctor_date: '',
-                    tor_rp_date: '',
-                    to: '',
-                    delivery_days: '7',
-                    seller_name: '',
-                    seller2: '',
-                    seller3: '',
-                    tax_id: '',
-                    tel_no: '',
-                    address_no: '',
-                    address_moo: '',
-                    address_road: '',
-                    address_subdistrict: '',
-                    address_district: '',
-                    address_province: '',
-                    zip_code: '',
-                    bidder_name: '',
-                    invoice_type: '',
-                    doc_date: '',
-                    doc_no: '',
-                    book_no: '',
-                    po_no: '',
-                    po_date: '',
-                    doc_type: '',
-                    po_base_no: 0,
-                    po_sub_no: 0,
-                    po_year_be: '',
-                    qu_date: '',
-                    rc_date: '',
-                    announce_date: '',
-                    deadline: '',
-                    vat_type: 'no_vat',
-                    items: [],
-                    committee: []
+                    buyer: '', pos_buyer: '', memo_date: '', ctor_date: '', tor_rp_date: '',
+                    to: '', delivery_days: '7', seller_name: '', seller2: '', seller3: '',
+                    tax_id: '', tel_no: '', address_no: '', address_moo: '', address_road: '',
+                    address_subdistrict: '', address_district: '', address_province: '', zip_code: '',
+                    bidder_name: '', invoice_type: '', doc_date: '', doc_no: '', book_no: '',
+                    po_no: '', po_date: '', doc_type: '', po_base_no: 0, po_sub_no: 0, po_year_be: '',
+                    qu_date: '', rc_date: '', announce_date: '', deadline: '',
+                    vat_type: 'no_vat', items: [], committee: []
                 }
             };
         }
 
-        // =========================================================================
-        // 5. หยอดข้อมูลลงในฟอร์ม DOM
-        // =========================================================================
         if (res && res.success) {
             window.currentBudget = res.data;
             
@@ -270,7 +241,6 @@ export async function searchBudgetInfo() {
                 if (typeof resetSellerFields === 'function') resetSellerFields(false); 
             }
             
-            // ข้อมูลงานแผน
             if (document.getElementById('division')) document.getElementById('division').value = res.data.division || '';
             if (document.getElementById('project')) document.getElementById('project').value = res.data.project || '';
             if (document.getElementById('activities')) document.getElementById('activities').value = res.data.activities || '';
@@ -316,8 +286,13 @@ export async function searchBudgetInfo() {
                 if (document.getElementById('address_province')) document.getElementById('address_province').value = res.data.address_province || '';
                 if (document.getElementById('zip_code')) document.getElementById('zip_code').value = res.data.zip_code || '';
                 if (document.getElementById('bidder_name')) document.getElementById('bidder_name').value = res.data.bidder_name || '';
+                
                 if (document.getElementById('seller2')) document.getElementById('seller2').value = res.data.seller2 || '';
                 if (document.getElementById('seller3')) document.getElementById('seller3').value = res.data.seller3 || '';
+                
+                // 🎯 แก้ไขเพิ่ม: เรียกใช้ฟังก์ชันเพื่อเช็กค่า seller2 และ seller3 สั่งซ่อนกล่องเตือนทันทีหลังหยอดข้อมูลสำเร็จ
+                checkSellerValidation();
+
                 if (document.getElementById('invoice_type')) document.getElementById('invoice_type').value = res.data.invoice_type || '';
                 
                 const dateVal = res.data.doc_date || res.data.invoice_date || res.data.cr_date || '';
@@ -364,9 +339,9 @@ export async function searchBudgetInfo() {
 
                 setDateField('date_memo',     res.data.memo_date);
                 setDateField('date_ctor',     res.data.ctor_date);
-                setDateField('date_tor_rp',  res.data.tor_rp_date);
-                setDateField('date_req',     res.data.qu_date);
-                setDateField('date_result',  res.data.rc_date);
+                setDateField('date_tor_rp',   res.data.tor_rp_date);
+                setDateField('date_req',      res.data.qu_date);
+                setDateField('date_result',   res.data.rc_date);
                 setDateField('date_announce', res.data.announce_date);
                 setDateField('date_po',       res.data.po_date);
                 
@@ -392,7 +367,7 @@ export async function searchBudgetInfo() {
                     const tbody = document.getElementById('itemListBody');
                     if (tbody) {
                         tbody.innerHTML = '';
-                        let currentRowCount = 0;
+                        window.currentRowCount = 0;
                         
                         res.data.items.forEach((item) => {
                             currentRowCount++;
@@ -482,11 +457,9 @@ export function clearFormExceptLogNo() {
     setQueryVal('input[name="to"]', '');
     setVal('deliveryDays', '7');
     
-    // เคลียร์ผู้ขอซื้อ และ ตำแหน่งผู้ขอซื้อ
     setVal('buyer', '');
     setVal('pos_buyer', '');
 
-    // เคลียร์ข้อมูลแสดงผล PO และ Hidden Fields ของ PO
     setVal('po_no_display', '');
     setVal('po_no_hidden', '');
     setVal('po_base_no_hidden', '0');
@@ -509,7 +482,6 @@ export function clearFormExceptLogNo() {
     setVal('zip_code', '');
     setVal('bidder_name', '');
 
-    // เคลียร์ข้อมูลเอกสารและการเงิน
     setVal('invoice_type', '');
     setVal('doc_date', '');
     setVal('cal_value', '');
@@ -518,7 +490,6 @@ export function clearFormExceptLogNo() {
     setQueryVal('input[name="doc_no"]', '');
     setQueryVal('input[name="book_no"]', '');
     
-    // เคลียร์วันที่ทั้ง 9 รายการ (_picker, _hidden, _display)
     const dateFields = [
         'date_memo', 'date_ctor', 'date_tor_rp', 'date_req', 
         'date_result', 'date_announce', 'date_po', 'date_delivery', 'date_receive'
@@ -529,7 +500,6 @@ export function clearFormExceptLogNo() {
         setVal(f + '_display', '');
     });
 
-    // เคลียร์ตารางรายการสินค้า
     const tbody = document.getElementById('itemListBody');
     if (tbody) {
         tbody.innerHTML = "";
@@ -537,7 +507,9 @@ export function clearFormExceptLogNo() {
         if (typeof addRowBatch === 'function') addRowBatch(); 
     }
     
-    // เคลียร์ข้อความแจ้งเตือนและรีเซ็ตปุ่มบันทึก
+    // 🎯 แก้ไขเพิ่ม: เรียกใช้เพื่อตรวจสอบสถานะการแสดง/ซ่อนกล่องเตือนเมื่อมีการเคลียร์ฟอร์ม
+    checkSellerValidation();
+
     const valMsg = document.getElementById('validationMessage');
     if (valMsg) valMsg.innerText = "";
 
@@ -1207,7 +1179,7 @@ export async function saveKbsPayData(payload) {
     await insertAuditLog("SAVE_PAY", `บันทึกข้อมูลเบิกจ่ายสำเร็จ เลข นผ.2: ${data.log_no}`, currentUser);
 
     // 5. เตรียม Payload ส่งให้ GAS Microservice สร้าง Google Doc / PDF
-    const docDataPayload = prepareDocDataForMicroservice(data, items);
+    const docDataPayload = await prepareDocDataForMicroservice(data, items);
 
     const gasResponse = await fetch(GAS_DOC_MICROSERVICE_URL, {
       method: "POST",
@@ -1241,26 +1213,59 @@ export async function saveKbsPayData(payload) {
   }
 }
 
-export function prepareDocDataForMicroservice(data, items) {
-  let fullAddress = (data.ad_no || "").trim(); 
-  if (data.ad_m) fullAddress += ' ม.' + data.ad_m;
-  if (data.ad_rd && data.ad_rd !== "-") fullAddress += ' ' + data.ad_rd; 
-  if (data.ad_tb) fullAddress += ' ' + data.ad_tb;
-  if (data.ad_mu) fullAddress += ' ' + data.ad_mu;
-  if (data.ad_pr) fullAddress += ' ' + data.ad_pr;
-  if (data.postid) fullAddress += ' ' + data.postid;
+export async function getOfficerByDivision(divisionName) {
+  if (!divisionName) return "";
+  try {
+    const officersRef = collection(db, "officers");
+    const q = query(
+      officersRef,
+      where("division", "==", divisionName.trim()),
+      where("pos", "==", "เจ้าหน้าที่")
+    );
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const officerData = querySnapshot.docs[0].data();
+      return officerData.name || "";
+    }
+    return "";
+  } catch (error) {
+    console.error("❌ เกิดข้อผิดพลาดในการดึงข้อมูล officer จาก Firestore:", error);
+    return "";
+  }
+}
+
+export async function prepareDocDataForMicroservice(data, items) {
+  // 1. ดึงข้อมูลที่อยู่พร้อมค่าสำรอง (Fallback)
+  const adNo = data.ad_no || data.address_no || "";
+  const adM  = data.ad_m  || data.address_moo || "";
+  const adRd = data.ad_rd || data.address_road || "";
+  const adTb = data.ad_tb || data.address_subdistrict || "";
+  const adMu = data.ad_mu || data.address_district || "";
+  const adPr = data.ad_pr || data.address_province || "";
+  const postid = data.postid || data.zip_code || "";
+  const adPh = data.ad_ph || data.tel_no || "";
+  const taxid = data.taxid || data.tax_id || "";
+
+  let fullAddress = adNo.trim(); 
+  if (adM) fullAddress += ' ม.' + adM;
+  if (adRd && adRd !== "-") fullAddress += ' ' + adRd; 
+  if (adTb) fullAddress += ' ' + adTb;
+  if (adMu) fullAddress += ' ' + adMu;
+  if (adPr) fullAddress += ' ' + adPr;
+  if (postid) fullAddress += ' ' + postid;
 
   const cleanPosition = (pos) => {
     if (!pos) return '';
     return pos.includes('รองผู้อำนวยการ') ? 'รองผู้อำนวยการ' : pos;
   };
 
-  let rawObjective = (data.objective || "").trim();
+  let rawObjective = (data.objective || data.details || "").trim();
   let cleanObjective = rawObjective.replace(/^(ซื้อ|จ้าง)\s*/, "");
 
-  let prType = data.pr_type || "ซื้อ";
-  let calculatedType = data.type || (prType === "ซื้อ" ? "พัสดุ" : "งานจ้าง");
-  let calculatedSellerType = prType === "ซื้อ" ? "ขาย" : "รับจ้าง";
+  let prType = data.pr_type || data.method || "ซื้อ";
+  let calculatedType = data.type || (prType.includes("ซื้อ") ? "พัสดุ" : "งานจ้าง");
+  let calculatedSellerType = prType.includes("ซื้อ") ? "ขาย" : "รับจ้าง";
 
   const divStr = data.division ? String(data.division).trim() : "";
   let divPrefix = "รองผู้อำนวยการกลุ่มบริหารงาน";
@@ -1276,28 +1281,41 @@ export function prepareDocDataForMicroservice(data, items) {
   else if (divStr.includes("งบประมาณ")) committeePerson = "นางสาวเปรมฤดี จูหลง";
   else if (divStr.includes("กิจการนักเรียน")) committeePerson = "นายจีรพจน์ ทองขาว";
 
+  // 🎯 ค้นหาเจ้าหน้าที่ (officer) จาก Firestore ตามกลุ่มงาน (division)
+  let calculatedOfficer = data.officer || "";
+  if (!calculatedOfficer && divStr) {
+    calculatedOfficer = await getOfficerByDivision(divStr);
+  }
+
+  // 2. จัดการชุดกรรมการและบทบาท
   let hasCommittee = (data.comm_name2 && data.comm_name2.trim() !== "") || (data.comm_name3 && data.comm_name3.trim() !== "");
   let no1 = "", pos1 = "", pos_name1 = "", cr_sign1 = "";
   let no2 = "", pos2 = "", pos_name2 = "", cr_sign2 = "";
   let no3 = "", pos3 = "", pos_name3 = "", cr_sign3 = "";
 
   if (data.comm_name1 && data.comm_name1.trim() !== "") {
-    no1 = hasCommittee ? "1." : ""; 
+    no1 = hasCommittee ? "1.": ""; 
     pos1 = "ตำแหน่ง";
-    pos_name1 = hasCommittee ? "ประธานคณะกรรมการ" : "ผู้ตรวจรับ";
-    cr_sign1 = "ลงชื่อ.....................................ประธานกรรมการ/ผู้ตรวจรับ";
+    pos_name1 = hasCommittee ? "ประธานกรรมการ" : "ผู้ตรวจรับ";
+    cr_sign1 = "ลงชื่อ...............................ประธานกรรมการ/ผู้ตรวจรับ";
   }
   if (data.comm_name2 && data.comm_name2.trim() !== "") {
-    no2 = "2."; pos2 = "ตำแหน่ง"; pos_name2 = "กรรมการ";
+    no2 = "2."; 
+    pos2 = "ตำแหน่ง";
+    pos_name2 = "กรรมการ";
     cr_sign2 = "ลงชื่อ.....................................กรรมการ/ผู้ตรวจรับ";
   }
   if (data.comm_name3 && data.comm_name3.trim() !== "") {
-    no3 = "3."; pos3 = "ตำแหน่ง"; pos_name3 = "กรรมการ/เลขานุการ";
+    no3 = "3."; 
+    pos3 = "ตำแหน่ง";
+    pos_name3 = "กรรมการ/เลขานุการ";
     cr_sign3 = "ลงชื่อ.....................................กรรมการ/ผู้ตรวจรับ";
   }
 
   const validItems = items || [];
+  const totalAmount = Number(String(data.total || data.amount || 0).replace(/,/g, '')) || 0;
 
+  // 3. ประกอบโครงสร้าง docData
   const docData = {
     itemCount: validItems.length,
     date: toThaiDate(new Date(), false), 
@@ -1305,16 +1323,16 @@ export function prepareDocDataForMicroservice(data, items) {
     PR_TYPE: prType,
     type: calculatedType, 
     
-    buyer: data.buyer || "",
-    pos_buyer: data.pos_buyer || "",
+    buyer: data.buyer || data.req_name || "",
+    pos_buyer: data.pos_buyer || data.position_p || "",
 
-    seller: data.seller || "",
+    seller: data.seller || data.seller_name || "",
     seller2: data.seller2 || "",
     seller3: data.seller3 || "", 
-    taxid: data.taxid || "",
+    taxid: taxid,
     seller_address: fullAddress.trim(), 
-    ad_no: data.ad_no || "", ad_m: data.ad_m || "", ad_rd: data.ad_rd || "", ad_tb: data.ad_tb || "", 
-    ad_mu: data.ad_mu || "", ad_pr: data.ad_pr || "", postid: data.postid || "", ad_ph: data.ad_ph || "",
+    ad_no: adNo, ad_m: adM, ad_rd: adRd, ad_tb: adTb, 
+    ad_mu: adMu, ad_pr: adPr, postid: postid, ad_ph: adPh,
     
     division: divStr, 
     division_prefix: divPrefix,
@@ -1323,7 +1341,7 @@ export function prepareDocDataForMicroservice(data, items) {
     committees: committeePerson,
     committee: committeePerson,
 
-    officer: data.officer || "", 
+    officer: calculatedOfficer, 
     DB_director: "นางสาวเปรมฤดี จูหลง",
     head_officer: "นางสาวเปรมฤดี จูหลง",
     director: "นายเกียรติมงคล พูดเพราะ",
@@ -1333,26 +1351,28 @@ export function prepareDocDataForMicroservice(data, items) {
     project: data.project || "", 
     objective: cleanObjective, 
     to: data.to || "", 
-    total: data.total || 0, 
-    bathtext: convertToThaiBahtText(Number(String(data.total).replace(/,/g, '')) || 0), 
+    total: totalAmount, 
+    bathtext: convertToThaiBahtText(totalAmount), 
     department: data.department || "", 
     d_dateline: data.d_dateline || "0",
 
+    // 🎯 แปลงวันที่ทุกฟิลด์เป็นวันที่ไทย
     memo_date: toThaiDate(data.memo_date),
     ctor_date: toThaiDate(data.ctor_date),
     tor_rp_date: toThaiDate(data.tor_rp_date),
 
     PR_DATE: toThaiDate(data.qu_date), 
-    announce_date: data.announce_date || "", 
-    PO_date: data.po_date || "",
+    announce_date: toThaiDate(data.announce_date), 
+    PO_date: toThaiDate(data.po_date),
     PO_NO: data.po_no || "", 
-    deadline: data.deadline || "", 
-    rc_date: data.rc_date || "",
-    invoice_no: data.invoice_no || "", 
-    invoice_book: data.invoice_book || "",
+    deadline: toThaiDate(data.deadline), 
+    rc_date: toThaiDate(data.rc_date),
+    invoice_no: data.invoice_no || data.doc_no || "", 
+    invoice_book: data.invoice_book || data.book_no || "",
     invoice_type: data.invoice_type || "", 
-    invoice_date: data.invoice_date || "",
-    qu_date: data.qu_date || "", 
+    invoice_date: toThaiDate(data.invoice_date || data.cr_date),
+    qu_date: toThaiDate(data.qu_date), 
+    CR_date: toThaiDate(data.cr_date || data.invoice_date),
     
     seller_type: calculatedSellerType, 
 
@@ -1360,8 +1380,7 @@ export function prepareDocDataForMicroservice(data, items) {
     vat: (!data.vat || parseFloat(String(data.vat).replace(/,/g, '')) === 0) ? "-" : data.vat,
     quantity: validItems.length || data.quantity || "0",
     quarantee: data.quarantee || "", 
-    CR_date: toThaiDate(data.invoice_date),
-    sell_name: data.sell_name || "",
+    sell_name: data.sell_name || data.bidder_name || "",
     
     comm_name1: data.comm_name1 || "", comm_pos1: cleanPosition(data.comm_pos1),
     comm_name2: data.comm_name2 || "", comm_pos2: data.comm_pos2 || "",
@@ -1376,7 +1395,8 @@ export function prepareDocDataForMicroservice(data, items) {
     act_paid: data.act_paid || 0
   };
 
-  for (let i = 1; i <= 29; i++) {
+  // 4. วนลูปพัสดุขยายรองรับสูงสุด 50 รายการ
+  for (let i = 1; i <= 50; i++) {
     if (i <= validItems.length) {
       const item = validItems[i - 1];
       const unitPrice = Number(String(item.pr || 0).replace(/,/g, '')) || 0;
@@ -1545,7 +1565,7 @@ export async function submitForm() {
         saveBtn.disabled = true;
     }
 
-    // 🎯 ดึงค่าจากช่อง display/hidden/picker 
+    // 🎯 ดึงค่าวันที่จากหน้าจอ
     const getDateVal = (fieldPrefix, fallback = '') => {
         const displayElem = document.getElementById(`${fieldPrefix}_display`);
         const hiddenElem  = document.getElementById(`${fieldPrefix}_hidden`);
@@ -1593,72 +1613,80 @@ export async function submitForm() {
                 sub_no: Number(document.getElementById('po_sub_no_hidden')?.value) || 0,
                 year_be: Number(document.getElementById('po_year_be_hidden')?.value) || (new Date().getFullYear() + 543)
             };
-            console.log("ℹ️ ใช้เลข PO เดิม:", existingPoNo);
         } else {
             if (typeof generateLogPoNumber === 'function') {
                 const holidays = window.allHolidays || window.holidays || [];
                 const poLogs = window.allPoLogs || [];
                 poGenerated = generateLogPoNumber(poType, prDate, poLogs, holidays);
             }
-            console.log("✨ ออกเลข PO ใหม่:", poGenerated.log_po);
         }
 
         const deliveryDaysVal = parseInt(document.getElementById('deliveryDays')?.value, 10) || 7;
         const logNo = document.getElementById('logNoInput')?.value.trim() || '';
 
-        // 🎯 รวบรวมรายการพัสดุ/อุปกรณ์
+        // 🎯 1. ดึงรายการพัสดุจากหน้าจอ
         const equipmentItems = [];
-        const maxRows = typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 29;
-        const torMap = {};
+        const tableRows = document.querySelectorAll('#itemListBody tr').length;
+        const maxRows = Math.max(
+                typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 0,
+                tableRows,
+                10 // อย่างน้อยอ่าน 10 แถวสำรองไว้
+            );
 
         for (let i = 1; i <= maxRows; i++) {
-            const eqNameInput = document.getElementById(`list${i}`) || document.getElementsByName(`list${i}`)[0];
-            const eqName = eqNameInput ? eqNameInput.value.trim() : "";
-            
-            const torVal = document.getElementById(`torlist${i}`)?.value.trim() || "";
-            torMap[`torlist${i}`] = torVal;
+            const eqInput = document.getElementById(`list${i}`) || document.getElementsByName(`list${i}`)[0];
+            const eqName = eqInput ? eqInput.value.trim() : "";
 
             if (eqName !== "") {
+                const quVal = parseFloat(document.getElementById(`qu${i}`)?.value) || 0;
+                const unVal = document.getElementById(`un${i}`)?.value || document.getElementsByName(`un${i}`)[0]?.value || '';
+                const prVal = parseFloat(document.getElementById(`pr${i}`)?.value) || 0;
                 const rawAm = document.getElementById(`am${i}`)?.value || "0.00";
+                const amVal = parseFloat(String(rawAm).replace(/,/g, '')) || 0;
+                const torVal = document.getElementById(`torlist${i}`)?.value.trim() || "";
+
                 equipmentItems.push({
                     log_no: logNo, 
                     equipment: eqName,
                     list: eqName,
                     torlist: torVal,
-                    qu: parseFloat(document.getElementById(`qu${i}`)?.value) || 0,
-                    un: document.getElementById(`un${i}`)?.value || document.getElementsByName(`un${i}`)[0]?.value || '',
-                    pr: parseFloat(document.getElementById(`pr${i}`)?.value) || 0,
-                    am: parseFloat(rawAm.replace(/,/g, '')) || 0,
-                    sp: '' 
+                    qu: quVal,
+                    un: unVal,
+                    pr: prVal,
+                    am: amVal,
+                    sp: amVal 
                 });
             }
         }
 
-        // 🎯 รวบรวมข้อมูล payData ลงวัตถุสำหรับบันทึกใน Firestore
+        const grandTotal = document.getElementById('cal_grandtotal')?.value || '0.00';
+        const exVat = document.getElementById('cal_subtotal')?.value || '0.00';
+        const vatVal = document.getElementById('cal_vat')?.value || '0.00';
+        const taxVal = document.getElementById('cal_income_tax')?.value || '0.00';
+        const actPaid = document.getElementById('cal_act_paid')?.value || '0.00';
+
+        // 🎯 2. โครงสร้างข้อมูลสำหรับ Firestore
         const payData = {
             row_number: document.getElementById('row_number')?.value || '0', 
             log_no: logNo,
             to: document.querySelector('input[name="to"]')?.value || '',
-
             po_no: poGenerated.log_po,
             po_base_no: poGenerated.base_no,
             po_sub_no: poGenerated.sub_no,
             po_year_be: poGenerated.year_be,
             doc_type: poType,
 
-            buyer: document.getElementById('buyer')?.value.trim() || '',
-            pos_buyer: document.getElementById('pos_buyer')?.value.trim() || '',
-
+            buyer: document.getElementById('buyer')?.value.trim() || document.getElementById('req_name')?.value.trim() || '',
+            pos_buyer: document.getElementById('pos_buyer')?.value.trim() || document.getElementById('position_p')?.value.trim() || '',
+            
             delivery_days: deliveryDaysVal,
             d_dateline: deliveryDaysVal,
-
             pr_type: methodVal,
             method: methodVal,
             
             project: document.getElementById('project')?.value || document.getElementById('budget_project')?.value || '',
             activities: document.getElementById('activities')?.value || document.getElementById('budget_activities')?.value || '',
             objective: document.getElementById('details')?.value || document.getElementById('objective')?.value || '',
-            details: document.getElementById('details')?.value || '',
             division: document.getElementById('division')?.value || '', 
 
             memo_date: getDateVal('date_memo'),
@@ -1669,80 +1697,54 @@ export async function submitForm() {
             announce_date: getDateVal('date_announce'), 
             po_date: getDateVal('date_po', prDate),       
             deadline: getDateVal('date_delivery'),   
-            
             cr_date: getDateVal('date_receive', prDate),   
             invoice_date: getDateVal('date_receive', prDate),       
             
-            committee: [
-                { name: document.getElementById('comm_name1')?.value || '', pos: document.getElementById('comm_pos1')?.value || '' },
-                { name: document.getElementById('comm_name2')?.value || '', pos: document.getElementById('comm_pos2')?.value || '' },
-                { name: document.getElementById('comm_name3')?.value || '', pos: document.getElementById('comm_pos3')?.value || '' }
-            ],
+            comm_name1: document.getElementById('comm_name1')?.value || '',
+            comm_pos1: document.getElementById('comm_pos1')?.value || '',
+            comm_name2: document.getElementById('comm_name2')?.value || '',
+            comm_pos2: document.getElementById('comm_pos2')?.value || '',
+            comm_name3: document.getElementById('comm_name3')?.value || '',
+            comm_pos3: document.getElementById('comm_pos3')?.value || '',
             
             seller: document.getElementById('seller_name')?.value || '',
-            seller_name: document.getElementById('seller_name')?.value || '',
-            seller2: document.getElementById('seller2')?.value.trim() || '', 
-            seller3: document.getElementById('seller3')?.value.trim() || '',            
+            seller2: document.getElementById('seller2')?.value.trim() || '',
+            seller3: document.getElementById('seller3')?.value.trim() || '',
             
-            seller_address: {
-                ad_no: document.getElementById('address_no')?.value || '',             
-                ad_m: document.getElementById('address_moo')?.value || '',              
-                ad_rd: document.getElementById('address_road')?.value || '',            
-                ad_tb: document.getElementById('address_subdistrict')?.value || '',      
-                ad_mu: document.getElementById('address_district')?.value || '',        
-                ad_pr: document.getElementById('address_province')?.value || '',        
-                postid: document.getElementById('zip_code')?.value || '',               
-                ad_ph: document.getElementById('tel_no')?.value || '',                  
-                taxid: document.getElementById('tax_id')?.value || ''
-            },
+            ad_no: document.getElementById('address_no')?.value || '',
+            ad_m: document.getElementById('address_moo')?.value || '',
+            ad_rd: document.getElementById('address_road')?.value || '',
+            ad_tb: document.getElementById('address_subdistrict')?.value || '',
+            ad_mu: document.getElementById('address_district')?.value || '',
+            ad_pr: document.getElementById('address_province')?.value || '',
+            postid: document.getElementById('zip_code')?.value || '',
+            ad_ph: document.getElementById('tel_no')?.value || '',
+            taxid: document.getElementById('tax_id')?.value || '',
+            sell_name: document.getElementById('bidder_name')?.value || '',
             
-            tax_id: document.getElementById('tax_id')?.value || '',
-            tel_no: document.getElementById('tel_no')?.value || '',
-            address_no: document.getElementById('address_no')?.value || '',
-            address_moo: document.getElementById('address_moo')?.value || '',
-            address_road: document.getElementById('address_road')?.value || '',
-            address_subdistrict: document.getElementById('address_subdistrict')?.value || '',
-            address_district: document.getElementById('address_district')?.value || '',
-            address_province: document.getElementById('address_province')?.value || '',
-            zip_code: document.getElementById('zip_code')?.value || '',
-            sell_name: document.getElementById('bidder_name')?.value || '',          
-            bidder_name: document.getElementById('bidder_name')?.value || '',
-
-            invoice_type: document.getElementById('invoice_type')?.value || '',        
-            invoice_no: document.querySelector('input[name="doc_no"]')?.value || '', 
-            doc_no: document.querySelector('input[name="doc_no"]')?.value || '', 
-            invoice_book: document.querySelector('input[name="book_no"]')?.value || '', 
-            book_no: document.querySelector('input[name="book_no"]')?.value || '', 
-
-            financial: {
-                ex_vat: document.getElementById('cal_subtotal')?.value || '0.00',            
-                vat: document.getElementById('cal_vat')?.value || '0.00',                    
-                total: document.getElementById('cal_grandtotal')?.value || '0.00',
-                value: document.getElementById('cal_value')?.value || '0.00',
-                income_tax: document.getElementById('cal_income_tax')?.value || '0.00',
-                act_paid: document.getElementById('cal_act_paid')?.value || '0.00',           
-                vat_type: document.querySelector('input[name="vat_type"]:checked')?.value || 'no_vat'
-            },
-
+            invoice_type: document.getElementById('invoice_type')?.value || '',
+            invoice_no: document.querySelector('input[name="doc_no"]')?.value || '',
+            invoice_book: document.querySelector('input[name="book_no"]')?.value || '',
+            
+            ex_vat: exVat,
+            vat: vatVal,
+            total: grandTotal,
+            value: document.getElementById('cal_value')?.value || '0.00',
+            income_tax: taxVal,
+            act_paid: actPaid,
             vat_type: document.querySelector('input[name="vat_type"]:checked')?.value || 'no_vat',
-            budget_use: document.getElementById('quantity')?.value || '0.00',
-            amount: document.getElementById('cal_grandtotal')?.value || '0.00',
             
             items: equipmentItems,
             quantity: equipmentItems.length,
             isPaid: true,
             status: 'paid',
-            updatedAt: serverTimestamp(),
-            ...torMap
+            updatedAt: serverTimestamp()
         };
 
-        // =========================================================================
-        // 💾 บันทึกลง Firestore คอลเลกชัน log_pay
-        // =========================================================================
+        // 💾 3. บันทึกลง Firestore
         const payDocRef = doc(db, "log_pay", logNo);
         await setDoc(payDocRef, payData, { merge: true });
 
-        // อัปเดตสถานะใน log_budget ให้รับรู้ว่าพิมพ์เบิกจ่ายแล้ว
         try {
             const budgetDocRef = doc(db, "log_budget", logNo);
             const budgetSnap = await getDoc(budgetDocRef);
@@ -1755,10 +1757,28 @@ export async function submitForm() {
                 });
             }
         } catch (eBudget) {
-            console.warn("⚠️ ไม่สามารถอัปเดต log_budget ได้ (อาจไม่มีเอกสารนี้):", eBudget);
+            console.warn("⚠️ ไม่สามารถอัปเดต log_budget ได้:", eBudget);
         }
 
         console.log("✅ บันทึกฐานข้อมูล Firestore เรียบร้อยแล้ว");
+
+        // 🎯 4. สั่งเรียก prepareDocDataForMicroservice เพื่อจัดชุดตัวแปรส่ง GAS ให้ครบสมบูรณ์ 100%
+        const finalDocData = await prepareDocDataForMicroservice(payData, equipmentItems);
+
+        const gasPayload = {
+            secretKey: INTERNAL_SECRET_KEY,
+            action: "generateDocFromTemplate",
+            docData: finalDocData
+        };
+
+        // 🚀 ยิง HTTP POST ไปยัง GAS Web App Microservice
+        const response = await fetch(GAS_DOC_MICROSERVICE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(gasPayload)
+        });
+
+        const gasResult = await response.json();
 
         // Restore UI Button State
         if (saveBtn) {
@@ -1766,67 +1786,62 @@ export async function submitForm() {
             saveBtn.disabled = false;
         }
 
-        // =========================================================================
-        // 🎨 แสดงผลแจ้งเตือนความสำเร็จบน UI
-        // =========================================================================
-        let supplierButtonHtml = `
-            <div style="margin-top: 10px; color: #4a4a4a; font-size: 0.9rem;">
-                (บันทึกข้อมูลเข้าฐานข้อมูลสำเร็จแล้ว)
-            </div>
-        `;
+        // 🎨 5. แสดงผลการทำงานสำเร็จบน UI
+        if (gasResult && gasResult.status === 'success') {
+            let htmlContent = `
+                <div style="text-align: center; padding: 25px; background-color: #f0fff4; border: 2px solid #28a745; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <h3 style="color: #28a745; margin-bottom: 10px;">✅ บันทึกและสร้างเอกสารสำเร็จ!</h3>
+                    
+                    <div style="margin-bottom: 15px; font-size: 1.1rem; color: #155724;">
+                        <span>เลข นผ.2: <b>${payData.log_no}</b></span> | 
+                        <span>เลข PO ที่ได้รับ: <b style="color: #d9534f; font-size: 1.2rem;">${payData.po_no || '-'}</b></span>
+                    </div>
 
-        let htmlContent = `
-            <div style="text-align: center; padding: 25px; background-color: #f0fff4; border: 2px solid #28a745; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h3 style="color: #28a745; margin-bottom: 10px;">✅ บันทึกข้อมูลสำเร็จ!</h3>
-                
-                <div style="margin-bottom: 15px; font-size: 1.1rem; color: #155724;">
-                    <span>เลข นผ.2: <b>${payData.log_no}</b></span> | 
-                    <span>เลข PO ที่ได้รับ: <b style="color: #d9534f; font-size: 1.2rem;">${payData.po_no || '-'}</b></span>
+                    <div style="margin-bottom: 20px;">
+                        <a href="${gasResult.docUrl}" target="_blank" role="button" 
+                           style="background-color: #007BFF; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; display: inline-block; margin: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                           📄 เปิดไฟล์ Google Docs (สำหรับจัดพิมพ์เอกสารราชการ)
+                        </a>
+                    </div>
+
+                    <div style="text-align: left; background-color: #ffffff; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px auto 15px auto; max-width: 580px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
+                        <h5 style="color: #155724; margin-top: 0; margin-bottom: 12px; font-weight: bold;">
+                            📋 ลำดับในการเรียงเอกสารเพื่อจัดชุดส่งงาน
+                        </h5>
+                        <ol style="margin: 0; padding-left: 22px; color: #1c7430; font-size: 0.95rem; line-height: 1.65;">
+                            <li><b>นผ.2</b></li>
+                            <li>ใบกำกับภาษี / ใบส่งของ / หนังสือส่งงาน</li>
+                            <li>เอกสารของผู้ขายหรือผู้รับจ้าง</li>
+                            <li>รายงานผลการตรวจรับพัสดุและอนุมัติจ่ายเงิน</li>
+                            <li>ใบตรวจรับพัสดุ</li>
+                            <li>ใบสั่งซื้อ / ใบสั่งจ้าง (PO)</li>
+                            <li>ประกาศผู้ชนะการเสนอราคา</li>
+                            <li>รายงานผลการพิจารณาและขออนุมัติสั่งซื้อ/จ้าง</li>
+                            <li>ใบเสนอราคา</li>
+                            <li>รายงานขอซื้อ / รายงานขอจ้าง</li>
+                            <li>คุณลักษณะเฉพาะของพัสดุที่จะจัดซื้อจัดจ้าง</li>
+                        </ol>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <button type="button" onclick="if(typeof handleNewTransaction === 'function') handleNewTransaction();" 
+                                style="background-color: #ffc107; color: #343a40; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; font-size: 1rem; display: inline-block; cursor: pointer;">
+                            🔄 ทำรายการใหม่ (เขียนใบต่อไป)
+                        </button>
+                    </div>
                 </div>
+            `;
 
-                <p style="color: #000000; margin-bottom: 20px;">
-                    ข้อมูลถูกบันทึกเรียบร้อยแล้วที่ระบบแผนงานและประวัติ log_pay
-                </p>
+            const msgDiv = document.getElementById('message');
+            if (msgDiv) {
+                msgDiv.innerHTML = htmlContent;
+                msgDiv.scrollIntoView({ behavior: 'smooth' });
+            }
 
-                ${supplierButtonHtml}
-
-                <div style="text-align: left; background-color: #ffffff; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px auto 15px auto; max-width: 580px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
-                    <h5 style="color: #155724; margin-top: 0; margin-bottom: 12px; font-weight: bold;">
-                        📋 ลำดับในการเรียงเอกสารเพื่อจัดชุดส่งงาน
-                    </h5>
-                    <ol style="margin: 0; padding-left: 22px; color: #1c7430; font-size: 0.95rem; line-height: 1.65;">
-                        <li><b>นผ.2</b></li>
-                        <li>ใบกำกับภาษี / ใบส่งของ / หนังสือส่งงาน</li>
-                        <li>เอกสารของผู้ขายหรือผู้รับจ้าง</li>
-                        <li>รายงานผลการตรวจรับพัสดุและอนุมัติจ่ายเงิน</li>
-                        <li>ใบตรวจรับพัสดุ</li>
-                        <li>ใบสั่งซื้อ / ใบสั่งจ้าง (PO)</li>
-                        <li>ประกาศผู้ชนะการเสนอราคา</li>
-                        <li>รายงานผลการพิจารณาและขออนุมัติสั่งซื้อ/จ้าง</li>
-                        <li>ใบเสนอราคา</li>
-                        <li>รายงานขอซื้อ / รายงานขอจ้าง</li>
-                        <li>คุณลักษณะเฉพาะของพัสดุที่จะจัดซื้อจัดจ้าง</li>
-                    </ol>
-                </div>
-                <div style="margin-top: 15px;">
-                    <button type="button" onclick="if(typeof clearFormExceptLogNo === 'function') clearFormExceptLogNo();" 
-                            style="background-color: #ffc107; color: #343a40; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; font-size: 1rem; display: inline-block; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: background-color 0.2s;">
-                        🔄 ทำรายการใหม่ (เขียนใบต่อไป)
-                    </button>
-                </div>
-            </div>
-        `;
-
-        const msgDiv = document.getElementById('message');
-        if (msgDiv) {
-            msgDiv.innerHTML = htmlContent;
-            msgDiv.scrollIntoView({ behavior: 'smooth' });
+            if (saveBtn) saveBtn.style.display = 'none';
         } else {
-            alert("✅ บันทึกข้อมูลสำเร็จ!");
+            alert("⚠️ บันทึก Firestore สำเร็จ แต่สร้างเอกสารไม่สำเร็จ: " + (gasResult ? gasResult.message : 'Unknown Error'));
         }
-        
-        if (typeof loadLogPoData === 'function') loadLogPoData();
-        if (saveBtn) saveBtn.style.display = 'none';
 
     } catch (error) {
         console.error("❌ submitForm Error:", error);
@@ -1836,6 +1851,42 @@ export async function submitForm() {
         }
         alert("⚠️ เกิดข้อผิดพลาดขณะบันทึกข้อมูล: " + error.message);
     }
+}
+
+export function handleNewTransaction() {
+    // 1. เคลียร์ข้อมูลในฟอร์มทั้งหมด
+    if (typeof clearFormExceptLogNo === 'function') {
+        clearFormExceptLogNo();
+    }
+    
+    // 2. เคลียร์ช่องกรอกเลข นผ.2 และย้ายเคอร์เซอร์ไปรอที่ช่องนี้
+    const logNoInput = document.getElementById('logNoInput');
+    if (logNoInput) {
+        logNoInput.value = '';
+        logNoInput.focus();
+    }
+
+    // 3. รีเซ็ตข้อความสถานะการค้นหา
+    const searchStatus = document.getElementById('searchStatus');
+    if (searchStatus) {
+        searchStatus.innerText = '* กรอกเลขเพื่อดึงข้อมูล';
+    }
+
+    // 4. ล้างกล่องข้อความแจ้งเตือนผลการบันทึกเอกสารเดิม (#message)
+    const msg = document.getElementById('message');
+    if (msg) {
+        msg.innerHTML = '';
+    }
+
+    // 5. แสดงปุ่มบันทึกข้อมูลกลับมา
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.innerHTML = "💾 บันทึกและสร้าง PDF";
+    }
+
+    // 6. ล้างตัวแปร Global สถิติทรัพย์สิน/งบประมาณปัจจุบัน
+    window.currentBudget = null;
 }
 
 function calculateTotals() {
@@ -2306,6 +2357,21 @@ export function updateCommittee(budget = 0, data = {}) {
     
     container.innerHTML = html;
 }
+
+export function checkSellerValidation() {
+    const s2 = document.getElementById('seller2')?.value.trim() || '';
+    const s3 = document.getElementById('seller3')?.value.trim() || '';
+    const alertBox = document.getElementById('seller23Alert');
+
+    if (alertBox) {
+        // ถ้าช่องใดช่องหนึ่งยังไม่ได้ระบุ ให้แสดงกล่องเตือน แต่ถ้าใส่ครบทั้ง 2 ช่องแล้ว ให้ซ่อน
+        if (!s2 || !s3) {
+            alertBox.style.display = 'block';
+        } else {
+            alertBox.style.display = 'none';
+        }
+    }
+}
 // ============================================================================
 // 🌐 ATTACH TO WINDOW (สำหรับรองรับ inline onclick ใน HTML เดิม)
 // ============================================================================
@@ -2338,3 +2404,4 @@ window.updateDateCalculation = updateDateCalculation;
 window.calculateTotals = calculateTotals;
 window.updateRefDateDisplayOnly = updateRefDateDisplayOnly;
 window.updateCommittee = updateCommittee;
+window.handleNewTransaction = handleNewTransaction;
