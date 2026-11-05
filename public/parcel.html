@@ -23,7 +23,7 @@
   
   <!-- Header Bar & ปุ่มย้อนกลับ -->
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <div class="btn-back" onclick="resetFormToMain()">
+    <div class="btn-back" style="cursor: pointer;" onclick="resetFormToMain()">
       <i class="bi bi-arrow-left"></i>
       <span>กลับหน้าหลัก Dashboard</span>
     </div>
@@ -37,7 +37,7 @@
       <div class="col-md-3">
         <label class="form-label fw-bold">ค้นหาด้วยเลข นผ.2</label>
         <div class="input-group">
-          <input type="text" id="parcelSearchLogNo" class="form-control" placeholder="เช่น นผ205690049">
+          <input type="text" id="parcelSearchLogNo" class="form-control" placeholder="เช่น นผ205690049" onkeypress="if(event.key==='Enter') loadParcelDataFromLogPay()">
           <button class="btn btn-navy" type="button" onclick="loadParcelDataFromLogPay()">
             <i class="bi bi-search"></i> ค้นหา
           </button>
@@ -47,10 +47,11 @@
         <label class="form-label fw-bold">กรองตามฝ่าย/กลุ่มสาระ</label>
         <select id="parcelFilterDivision" class="form-select" onchange="filterParcelTable()">
           <option value="">-- ทุกฝ่าย --</option>
-          <option value="กลุ่มบริหารงานงบประมาณ">กลุ่มบริหารงานงบประมาณ</option>
-          <option value="กลุ่มบริหารงานวิชาการ">กลุ่มบริหารงานวิชาการ</option>
-          <option value="กลุ่มบริหารงานทั่วไป">กลุ่มบริหารงานทั่วไป</option>
-          <option value="กลุ่มบริหารงานบุคคล">กลุ่มบริหารงานบุคคล</option>
+          <option value="บริหารทั่วไป">บริหารทั่วไป</option>
+          <option value="วิชาการ">วิชาการ</option>
+          <option value="บุคคล">บุคคล</option>
+          <option value="งบประมาณ">งบประมาณ</option>
+          <option value="กิจการนักเรียน">กิจการนักเรียน</option>
         </select>
       </div>
       <div class="col-md-3">
@@ -134,8 +135,8 @@
 <div class="modal fade" id="issueParcelModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content shadow-lg border-0 rounded-3">
-      <div class="modal-header bg-navy text-white" style="background-color: var(--navy-primary, #1e3a8a);">
-        <h5 class="modal-title fw-bold"><i class="bi bi-person-check-fill me-2" style="color: var(--gold-accent);"></i>บันทึกการเบิกจ่ายพัสดุ</h5>
+      <div class="modal-header bg-navy text-white" style="background-color: #0f172a;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-person-check-fill me-2 text-warning"></i>บันทึกการเบิกจ่ายพัสดุ</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-4">
@@ -158,6 +159,12 @@
     </div>
   </div>
 </div>
+
+<!-- SweetAlert2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Bootstrap 5 JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- JavaScript Module -->
 <script type="module" src="js/parcel.js"></script>
