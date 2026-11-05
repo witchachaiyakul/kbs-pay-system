@@ -20,10 +20,33 @@ window.budgetPlansCache = [];
 let currentSelectedActivity = null;
 
 // ============================================================================
+// 🛠️ HELPER FUNCTIONS
+// ============================================================================
+
+// ฟังก์ชันแปลงวันที่เป็นรูปแบบ dd-mm-yyyy (พ.ศ.)
+function formatThaiDateShort(dateVal) {
+  if (!dateVal) return '-';
+  
+  let d;
+  if (typeof dateVal === 'object' && dateVal !== null && typeof dateVal.toDate === 'function') {
+    d = dateVal.toDate();
+  } else {
+    d = new Date(dateVal);
+  }
+
+  if (isNaN(d.getTime())) return String(dateVal);
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const yearBE = d.getFullYear() + 543;
+
+  return `${day}-${month}-${yearBE}`;
+}
+
+// ============================================================================
 // 1. DATA FETCHING (COMMITTEES & DIVISION PLANS)
 // ============================================================================
 
-// ดึงรายชื่อผู้ขอใช้ (Committees) มาใส่ใน <datalist id="committee_list">
 export async function populateCommitteesDropdown() {
   const listElement = document.getElementById('committee_list');
   if (!listElement) return;
@@ -46,7 +69,6 @@ export async function populateCommitteesDropdown() {
   }
 }
 
-// กรองกิจกรรมตามฝ่าย (5 ฝ่าย)
 export async function filterByDept(deptName) {
   const deptTitle = document.getElementById('selectedDeptName');
   const tbody = document.getElementById('deptActivitiesTableBody');
@@ -98,25 +120,27 @@ export async function filterByDept(deptName) {
     if (list.length > 0) {
       tbody.innerHTML = list.map(item => `
         <tr>
-                <td class="text-center fw-semibold text-navy text-wrap text-break">${item.division}</td>
-                <td class="text-wrap text-break">
-                    <div class="fw-bold text-dark">${item.project_name}</div>
-                    <small class="text-muted">รหัส: ${item.project_id}</small>
-                </td>
-                <td class="text-wrap text-break">
-                    <strong class="text-primary">${item.activity_name}</strong>
-                </td>
-                <td class="text-center align-middle p-1"> <span class="badge bg-secondary text-wrap" style="max-width: 100%; white-space: normal; line-height: 1.3;"> ${item.fund_type} </span> </td>
-                <td class="text-end fw-bold text-dark text-nowrap">${item.total_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
-                <td class="text-end fw-bold text-danger text-nowrap">${item.used_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
-                <td class="text-end fw-bold text-success fs-6 text-nowrap">${item.remaining_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
-                <td class="text-center small text-wrap text-break">${item.responsible_person}</td>
-                <td class="text-center align-middle p-1">
-                    <button type="button" class="btn btn-navy btn-sm px-2 py-1 fw-bold shadow-sm w-100" onclick="openDisburseModalById('${item.project_id}')">
-                    <i class="bi bi-scissors me-1"></i>ตัดจ่าย
-                    </button>
-                </td>
-                </tr>
+          <td class="text-center fw-semibold text-navy text-wrap text-break">${item.division}</td>
+          <td class="text-wrap text-break">
+            <div class="fw-bold text-dark">${item.project_name}</div>
+            <small class="text-muted">รหัส: ${item.project_id}</small>
+          </td>
+          <td class="text-wrap text-break">
+            <strong class="text-primary">${item.activity_name}</strong>
+          </td>
+          <td class="text-center align-middle p-1"> 
+            <span class="badge bg-secondary text-wrap" style="max-width: 100%; white-space: normal; line-height: 1.3;"> ${item.fund_type} </span> 
+          </td>
+          <td class="text-end fw-bold text-dark text-nowrap">${item.total_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
+          <td class="text-end fw-bold text-danger text-nowrap">${item.used_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
+          <td class="text-end fw-bold text-success fs-6 text-nowrap">${item.remaining_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
+          <td class="text-center small text-wrap text-break">${item.responsible_person}</td>
+          <td class="text-center align-middle p-1">
+            <button type="button" class="btn btn-navy btn-sm px-2 py-1 fw-bold shadow-sm w-100" onclick="openDisburseModalById('${item.project_id}')">
+              <i class="bi bi-scissors me-1"></i>ตัดจ่าย
+            </button>
+          </td>
+        </tr>
       `).join('');
     } else {
       tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-warning">⚠️ ไม่พบรายการโครงการ/กิจกรรมของฝ่าย "${deptName}"</td></tr>`;
@@ -148,7 +172,6 @@ export function openDisburseModalCurrent() {
   const nameElem = document.getElementById('mdActivityName');
   if (nameElem) nameElem.innerText = item.activity_name || item.project_name || '-';
   
-  // รีเซ็ตฟอร์ม
   const form = document.getElementById('disburseForm');
   if (form) form.reset();
 
@@ -166,7 +189,6 @@ export function openDisburseModalCurrent() {
   document.getElementById('calcReqAmount').innerText = '0.00 ฿';
   document.getElementById('calcAfterRemain').innerText = remain.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
 
-  // ดึงประวัติการตัดจ่าย
   loadDisburseHistory(item.id || item.project_id);
 
   const modalElem = document.getElementById('disburseModal');
@@ -176,7 +198,6 @@ export function openDisburseModalCurrent() {
   }
 }
 
-// โหลดประวัติรายการตัดจ่ายจาก collection "log_budget"
 async function loadDisburseHistory(projectId) {
   const tbody = document.getElementById('mdDisburseHistoryBody');
   if (!tbody) return;
@@ -190,14 +211,7 @@ async function loadDisburseHistory(projectId) {
       let html = '';
       qSnap.forEach(docSnap => {
         const h = docSnap.data();
-        let displayDate = '-';
-
-        if (h.createdAt && h.createdAt.toDate) {
-          displayDate = h.createdAt.toDate().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
-        } else if (h.date) {
-          displayDate = h.date;
-        }
-
+        const displayDate = formatThaiDateShort(h.createdAt || h.date);
         const method = h.method || h.purchase_type || '-';
         const details = h.details || h.remark || '-';
         const applicant = h.buyer || h.requested_by || h.applicant || '-';
@@ -205,7 +219,7 @@ async function loadDisburseHistory(projectId) {
 
         html += `
           <tr>
-            <td class="small">${displayDate}</td>
+            <td class="small fw-semibold text-nowrap">${displayDate}</td>
             <td><span class="badge bg-secondary">${method}</span></td>
             <td class="small">${details}</td>
             <td class="small">${applicant}</td>
@@ -222,7 +236,6 @@ async function loadDisburseHistory(projectId) {
   }
 }
 
-// คำนวณยอดเงิน Real-time
 export function calculateDisburseBalance() {
   if (!currentSelectedActivity) return;
 
@@ -256,8 +269,8 @@ export function calculateDisburseBalance() {
 // 3. LOG NO. GENERATOR & DISBURSEMENT SUBMISSION
 // ============================================================================
 
-// ออกเลขเอกสาร นผ.2 ด้วย Transaction (รูปแบบ: นผ2MMYYNNNN)
-async function generateNextLogNoTransaction() {
+// 🎯 กำหนดชื่อฟังก์ชัน getNextLogNo() ให้ตรงกับการเรียกใช้
+export async function getNextLogNo() {
   const now = new Date();
   const monthStr = String(now.getMonth() + 1).padStart(2, '0');
   const thaiYearFull = now.getFullYear() + 543;
@@ -287,7 +300,6 @@ async function generateNextLogNoTransaction() {
   });
 }
 
-// ยืนยันขอตัดจ่ายและบันทึกลง Firestore
 export async function submitDisbursePlanDoc() {
   if (!currentSelectedActivity) {
     alert('❌ กรุณาเลือกกิจกรรมที่ต้องการตัดจ่ายก่อน');
@@ -311,14 +323,13 @@ export async function submitDisbursePlanDoc() {
   const btnSubmit = document.getElementById('btnSubmitDisburseDoc');
   if (btnSubmit) {
     btnSubmit.disabled = true;
-    btnSubmit.innerHTML = '⏳ กำลังบันทึกข้อมูล...';
+    btnSubmit.innerHTML = '⏳ กำลังบันทึกข้อมูลและสร้าง PDF...';
   }
 
   try {
     const projectId = currentSelectedActivity.id || currentSelectedActivity.project_id;
     const planRef = doc(db, "budget_plans", projectId);
 
-    // ดึงข้อมูลล่าสุดจาก Firestore เพื่อความถูกต้องของยอดคงเหลือ
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) {
       throw new Error("ไม่พบข้อมูลโครงการในระบบ");
@@ -333,15 +344,15 @@ export async function submitDisbursePlanDoc() {
       throw new Error("ยอดเงินคงเหลือไม่เพียงพอต่อการตัดจ่าย");
     }
 
-    // 1. ออกเลข นผ.2
-    const logNo = await generateNextLogNoTransaction();
+    // 1. ออกเลข นผ.2 ประจำเดือน
+    const logNo = await getNextLogNo();
 
     const balanceBefore = oldRemain;
     const balanceAfter = balanceBefore - amount;
     const newUsedBudget = oldUsed + amount;
     const newRemainBudget = balanceAfter;
 
-    // 2. บันทึกข้อมูลลง collection log_budget
+    // 2. บันทึกข้อมูลลง collection log_budget ใน Firestore
     const logBudgetRef = doc(db, "log_budget", logNo);
     await setDoc(logBudgetRef, {
       log_no: logNo,
@@ -365,7 +376,86 @@ export async function submitDisbursePlanDoc() {
       remaining_budget: newRemainBudget
     });
 
-    // สำเร็จ: ซ่อน Modal ฟอร์ม และแสดง Success Modal
+    if (currentSelectedActivity) {
+      currentSelectedActivity.used_budget = newUsedBudget;
+      currentSelectedActivity.remaining_budget = newRemainBudget;
+    }
+
+    // 🎯 4. เตรียม Payload บริสุทธิ์ส่งให้ Google Apps Script (ยึดตามโครงสร้าง Google Sheets Template)
+    const now = new Date();
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    const formattedDate = `${now.getDate()} ${thaiMonths[now.getMonth()]} พ.ศ. ${now.getFullYear() + 543}`;
+
+    const pdfPayload = {
+      action: "generatePDFFromSheet",
+      log_no: logNo,
+      project_name: currentSelectedActivity.project_name || '-',
+      activity_name: currentSelectedActivity.activity_name || '-',
+      activities: currentSelectedActivity.activity_name || '-',
+      division: currentSelectedActivity.division || '-',
+      fund_type: currentSelectedActivity.fund_type || 'รายได้สถานศึกษา',
+      responsible_person: currentSelectedActivity.responsible_person || applicant,
+      method: purchaseType,
+      purchase_type: purchaseType,
+      buyer: applicant,
+      requested_by: applicant,
+      applicant: applicant,
+      details: remark,
+      remark: remark,
+      balance_before: balanceBefore,
+      budget_use: amount,
+      amount: amount,
+      balance_after: balanceAfter,
+      total_budget: oldTotal,
+      formatted_date: formattedDate,
+      date: formattedDate
+    };
+
+    let pdfUrl = null;
+    const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwX653dlaUHJmpcq6y-UOYJlDkN7u7UZhGeqRV-egjEtMEDUk1O-EWm6Db7ZbD66HkAxQ/exec";
+
+    console.log("📤 [Frontend Log 1] Payload to GAS:", pdfPayload);
+
+    if (APPS_SCRIPT_WEB_APP_URL && !APPS_SCRIPT_WEB_APP_URL.includes("YOUR_SCRIPT_ID")) {
+      try {
+        const response = await fetch(APPS_SCRIPT_WEB_APP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(pdfPayload)
+        });
+
+        console.log("📥 [Frontend Log 2] HTTP Response Status:", response.status);
+        const resJson = await response.json();
+        console.log("📥 [Frontend Log 3] Parsed Response JSON:", resJson);
+
+        if (resJson && (resJson.pdfUrl || resJson.status === 'success')) {
+          pdfUrl = resJson.pdfUrl;
+        } else {
+          console.warn("⚠️ [Frontend Warning] GAS returned no pdfUrl:", resJson);
+        }
+      } catch (errPdf) {
+        console.error("❌ [Frontend Error] Fetch to GAS failed:", errPdf);
+      }
+    }
+
+    // 🎯 5. ปรับการปลดล็อกปุ่มเปิด PDF (#btnOpenPdf)
+    const btnPdf = document.getElementById('btnOpenPdf');
+    if (btnPdf) {
+      if (pdfUrl) {
+        btnPdf.href = pdfUrl;
+        btnPdf.target = "_blank";
+        btnPdf.classList.remove('disabled');
+        btnPdf.style.pointerEvents = 'auto';
+        btnPdf.style.opacity = '1';
+      } else {
+        btnPdf.href = '#';
+        btnPdf.classList.add('disabled');
+        btnPdf.style.pointerEvents = 'none';
+        btnPdf.style.opacity = '0.5';
+      }
+    }
+
+    // ซ่อน Modal ฟอร์ม และแสดง Success Modal
     const modalEl = document.getElementById('disburseModal');
     const modal = bootstrap.Modal.getInstance(modalEl);
     if (modal) modal.hide();
@@ -396,7 +486,12 @@ export function resetFormToMain() {
 export function resetAndReopenDisburse() {
   const successModal = bootstrap.Modal.getInstance(document.getElementById('disburseSuccessModal'));
   if (successModal) successModal.hide();
-  openDisburseModalCurrent();
+
+  // 🎯 เรียกเปิด Modal โดยอิงจาก ID เพื่อดึงข้อมูลล่าสุดเสมอ
+  if (currentSelectedActivity) {
+    const projId = currentSelectedActivity.project_id || currentSelectedActivity.id;
+    openDisburseModalById(projId);
+  }
 }
 
 // ============================================================================
@@ -408,7 +503,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ============================================================================
-// 🌐 GLOBAL EXPORTS (ผูกฟังก์ชันให้ HTML เรียกใช้งานได้)
+// 🌐 GLOBAL EXPORTS
 // ============================================================================
 window.filterByDept = filterByDept;
 window.openDisburseModalById = openDisburseModalById;
