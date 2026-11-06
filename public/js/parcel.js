@@ -15,10 +15,66 @@ import {
 // 📦 PARCEL MANAGEMENT GLOBAL STATE & CACHE
 // ============================================================================
 let allParcelsCache = []; // เก็บรายการพัสดุที่แตกแถว (Expanded Units)
-
+let fundTypeCache = {};
 // ============================================================================
 // 🔍 1. ดึงข้อมูลจาก log_pay เพื่อนำไปบริหารพัสดุ (Backend)
 // ============================================================================
+// Global Cache สำหรับเก็บ Map [ชื่อประเภทเงิน -> คำย่อ] (เช่น "เงินบริจาค": "บร.")
+
+
+/**
+ * 🔄 ดึงข้อมูลประเภทเงินทั้งหมดจาก Collection "fund_type" บน Firestore
+ */
+export async function loadFundTypesToDropdown() {
+  const selectElem = document.getElementById("parcelFundType");
+  if (!selectElem) return;
+
+  selectElem.innerHTML = `<option value="">-- กำลังดึงประเภทเงิน... --</option>`;
+
+  try {
+    const snap = await getDocs(collection(db, "fund_type"));
+    if (snap.empty) {
+      selectElem.innerHTML = `<option value="">-- ไม่พบข้อมูลประเภทเงิน --</option>`;
+      return;
+    }
+
+    const list = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,           // เช่น "fund03"
+        name: data.name || "",     // เช่น "เงินบริจาค"
+        prefix: data.prefix || "", // เช่น "บร."
+        order: Number(data.order) || 99
+      });
+    });
+
+    // เรียงลำดับตามฟิลด์ order (1, 2, 3...)
+    list.sort((a, b) => a.order - b.order);
+
+    selectElem.innerHTML = "";
+    fundTypeCache = {};
+
+    list.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.name;
+      option.dataset.prefix = item.prefix;
+      option.textContent = item.prefix ? `${item.name} (${item.prefix})` : item.name;
+      selectElem.appendChild(option);
+
+      // บันทึกลง Cache เพื่อใช้แปลงชื่อประเภทเงินเป็นรหัสย่อขณะออกเลขพัสดุ
+      if (item.name) {
+        fundTypeCache[item.name.trim()] = item.prefix ? item.prefix.trim() : item.name.trim();
+      }
+    });
+
+    console.log("✅ โหลดประเภทเงินจาก Firestore คอลเลกชัน fund_type สำเร็จ:", list);
+  } catch (error) {
+    console.error("❌ เกิดข้อผิดพลาดในการโหลด fund_type:", error);
+    selectElem.innerHTML = `<option value="">-- เกิดข้อผิดพลาดในการโหลด --</option>`;
+  }
+}
+
 export async function getLogPayForParcels(logNo) {
   try {
     if (logNo && logNo.trim() !== '') {
@@ -515,6 +571,7 @@ export function resetFormToMain() {
 // 🚀 AUTO-LOAD ON DOM READY
 // ============================================================================
 document.addEventListener("DOMContentLoaded", () => {
+  loadFundTypesToDropdown();
   loadParcelDataFromLogPay();
 });
 
@@ -534,3 +591,4 @@ window.openIssueModal = openIssueModal;
 window.syncRecipientInput = syncRecipientInput;
 window.executeIssueParcels = executeIssueParcels;
 window.resetFormToMain = resetFormToMain;
+window.loadFundTypesToDropdown = loadFundTypesToDropdown;
