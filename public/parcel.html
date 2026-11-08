@@ -44,7 +44,7 @@
         </div>
       </div>
       <div class="col-md-3">
-        <label class="form-label fw-bold">กรองตามฝ่าย/กลุ่มสาระ</label>
+        <label class="form-label fw-bold">ฝ่าย</label>
         <select id="parcelFilterDivision" class="form-select" onchange="filterParcelTable()">
           <option value="">-- ทุกฝ่าย --</option>
           <option value="บริหารทั่วไป">บริหารทั่วไป</option>
@@ -54,13 +54,23 @@
           <option value="กิจการนักเรียน">กิจการนักเรียน</option>
         </select>
       </div>
+
+      <!-- 🎯 เพิ่ม Dropdown ปีงบประมาณ ต่อจากกรองตามฝ่าย -->
+    <div class="col-md-2">
+      <label class="form-label fw-bold">ปีงบประมาณ</label>
+      <select id="parcelYearBE" class="form-select fw-bold" onchange="loadParcelDataFromLogPay()">
+        <option value="2569" selected>2569</option>
+        <option value="2570">2570</option>
+      </select>
+    </div>
+
       <div class="col-md-3">
-        <label class="form-label fw-bold">สถานะพัสดุ</label>
-        <select id="parcelFilterStatus" class="form-select" onchange="filterParcelTable()">
-          <option value="">-- ทุกสถานะ --</option>
-          <option value="pending">รอออกเลขพัสดุ</option>
+        <label class="form-label fw-bold">สถานะ</label>
+        <select id="parcelFilterStatus" class="form-select" onchange="loadParcelDataFromLogPay()">
+          <option value="pending" selected>รอออกเลขพัสดุ</option>
           <option value="registered">ออกเลขพัสดุแล้ว</option>
           <option value="issued">เบิกจ่ายแล้ว</option>
+          <option value="">-- ทุกสถานะ --</option>
         </select>
       </div>
       <div class="col-md-3 text-end">
@@ -71,57 +81,61 @@
     </div>
   </div>
 
-  <!-- Action Bar: ออกเลข & เบิกจ่าย -->
+  <!-- Action Bar: ออกเลข & เบิกจ่าย (ปรับเหลือเฉพาะปุ่มสั่งการ) -->
   <div class="card card-section p-3 mb-3 bg-light border-navy">
-    <div class="row g-2 align-items-center">
-      <div class="col-md-3">
-        <label class="form-label mb-1 fw-bold">เลือกประเภทเงิน (Fund Type)</label>
-        <select id="parcelFundType" class="form-select form-select-sm">
-          <option value="งบประมาณ"></option>
-          <option value="เงินนอกงบประมาณ">เงินนอกงบประมาณ (นบ.)</option>
-          <option value="เงินบริจาค">เงินบริจาค (บร.)</option>
-          <option value="เงินรายได้สถานศึกษา">เงินรายได้สถานศึกษา (รด.)</option>
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label mb-1 fw-bold">ปีงบประมาณ</label>
-        <input type="number" id="parcelYearBE" class="form-control form-control-sm text-center fw-bold" value="2569">
-      </div>
-      <div class="col-md-7 text-end pt-3">
-        <button class="btn btn-success me-2 fw-bold" onclick="confirmGenerateParcelIDs()">
-          <i class="bi bi-barcode"></i> ออกเลขพัสดุที่เลือก (<span id="selectedCountReg">0</span>)
-        </button>
-        <button class="btn btn-warning fw-bold" onclick="openIssueModal()">
-          <i class="bi bi-box-arrow-right"></i> เบิกจ่ายพัสดุที่เลือก (<span id="selectedCountIssue">0</span>)
-        </button>
-      </div>
+    <div class="d-flex justify-content-end align-items-center gap-2">
+      <button class="btn btn-success fw-bold" onclick="confirmGenerateParcelIDs()">
+        <i class="bi bi-barcode me-1"></i> ออกเลขพัสดุที่เลือก (<span id="selectedCountReg">0</span>)
+      </button>
+      <button class="btn btn-warning fw-bold text-dark" onclick="openIssueModal()">
+        <i class="bi bi-box-arrow-right me-1"></i> เบิกจ่ายพัสดุที่เลือก (<span id="selectedCountIssue">0</span>)
+      </button>
     </div>
   </div>
 
   <!-- Parcel Items Table -->
   <div class="card card-section p-0">
     <div class="card-section-header">
-      <i class="bi bi-list-check"></i> รายการพัสดุที่แตกแถวตามจำนวน (Expanded Parcels)
+      <i class="bi bi-list-check"></i> รายการพัสดุ
     </div>
+    <!-- ตำแหน่งแก้ไข: parcel.html ภายในส่วนตาราง <div class="table-responsive"> -->
     <div class="table-responsive">
-      <table class="table table-hover table-bordered align-middle m-0" id="parcelTable">
+      <!-- 🎯 เพิ่ม min-width: 1500px ให้ตารางขยายออกด้านข้างและเปิดแถบเลื่อนขวา-ซ้าย -->
+      <table class="table table-hover table-bordered align-middle m-0" id="parcelTable" style="min-width: 1500px;">
         <thead class="table-dark text-center" style="background-color: var(--navy-dark, #0f172a);">
           <tr>
-            <th style="width: 3%;"><input type="checkbox" id="selectAllParcels" onchange="toggleSelectAllParcels(this)"></th>
-            <th style="width: 10%;">เลข นผ.2</th>
-            <th style="width: 12%;">ฝ่ายที่รับผิดชอบ</th>
-            <th style="width: 8%;">วันตรวจรับ (CR)</th>
-            <th style="width: 25%;">รายการพัสดุ</th>
-            <th style="width: 6%;">ชิ้นที่</th>
-            <th style="width: 8%;">ราคา/หน่วย</th>
-            <th style="width: 6%;">หน่วย</th>
-            <th style="width: 12%;">เลขพัสดุที่ได้รับ</th>
-            <th style="width: 10%;">สถานะ / ผู้รับเบิก</th>
+            <th style="width: 40px;"><input type="checkbox" id="selectAllParcels" onchange="toggleSelectAllParcels(this)"></th>
+            <th style="width: 130px;">นผ.2</th>
+            <th style="width: 130px;">ฝ่าย</th>
+            <th style="width: 110px;">วันตรวจรับ</th>
+            <th style="width: 90px;">ประเภท</th>
+            <th style="width: 260px;">รายการ</th>
+            <th style="width: 70px;">ชิ้นที่</th>
+            <th style="width: 360px;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold"><i class="bi bi-tags-fill me-1"></i>หมวดหมู่</span>
+                <!-- 🎯 เพิ่ม Loading Indicator แสดงสถานะการทำงาน -->
+                <span id="headerAssetLoadingStatus" class="badge bg-warning text-dark d-none">
+                  <span class="spinner-border spinner-border-sm me-1" role="status"></span>กำลังเปลี่ยน...
+                </span>
+              </div>
+              
+              <select id="headerMainAsset" class="form-select form-select-sm bg-white text-dark mb-1 shadow-sm" onchange="onHeaderMainAssetChange(this)">
+                <option value="">-- เปลี่ยนหมวดหมู่หลักทั้งหมด --</option>
+              </select>
+              <select id="headerSubcatAsset" class="form-select form-select-sm bg-white text-dark shadow-sm" onchange="onHeaderSubcatAssetChange(this)" disabled>
+                <option value="">-- เปลี่ยนหมวดหมู่ย่อยทั้งหมด --</option>
+              </select>
+            </th>
+            <th style="width: 120px;">ราคา/หน่วย</th>
+            <th style="width: 80px;">หน่วย</th>
+            <th style="width: 180px;">เลขพัสดุ</th>
+            <th style="width: 160px;">สถานะ / ผู้รับเบิก</th>
           </tr>
         </thead>
         <tbody id="parcelTableBody">
           <tr>
-            <td colspan="10" class="text-center py-4 text-muted">
+            <td colspan="12" class="text-center py-4 text-muted">
               กรุณากรอกเลข นผ.2 หรือกดค้นหาเพื่อโหลดรายการพัสดุ
             </td>
           </tr>

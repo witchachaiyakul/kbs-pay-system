@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบออกเลขใบสั่งซื้อสั่งจ้าง - KBS LOG PO</title>
+  <title>ออกเลขใบสั่งซื้อสั่งจ้าง</title>
 
   <!-- 1. Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -22,7 +22,7 @@
 <div id="kbslogno" class="form-container container py-3">
   <!-- ปุ่มย้อนกลับหน้าหลัก -->
   <div class="btn-back mb-3" style="cursor: pointer;" onclick="resetFormToMain()">
-    <i class="bi bi-arrow-left"></i> กลับหน้าหลัก Dashboard
+    <i class="bi bi-arrow-left"></i> กลับหน้าหลัก
   </div>
 
   <main class="kbs-main p-4 p-md-5 rounded-3 bg-white shadow-sm border">
@@ -30,35 +30,35 @@
     <!-- Header Banner -->
     <div class="text-center mb-4">
       <h2 class="h3 fw-bold text-navy mb-1">
-        <i class="bi bi-file-earmark-text-fill me-2 text-primary"></i>ระบบออกเลขใบสั่งซื้อสั่งจ้าง
+        <i class="bi bi-file-earmark-text-fill me-2 text-primary"></i>ออกเลขใบสั่งซื้อสั่งจ้าง
       </h2>
       <p class="text-muted small">ออกเลขเอกสาร ตรวจสอบประวัติ และจัดการข้อมูลการจัดซื้อจัดจ้าง</p>
       <div class="mx-auto" style="height: 3px; width: 140px; background-color: var(--gold-accent, #d4af37);"></div>
     </div>
 
     <!-- 1. ปุ่มเลือกประเภทเอกสาร (3 หมวดหลัก po, wo, fpo) -->
-    <div class="card-section mb-4">
-      <div class="card-section-header fw-bold mb-3">
-        <i class="bi bi-diagram-3-fill me-2"></i>1. เลือกประเภทเอกสารจัดซื้อจัดจ้าง
-      </div>
+      <div class="card-section mb-4">
+        <div class="card-section-header fw-bold mb-3">
+          <i class="bi bi-diagram-3-fill me-2"></i>เลือกประเภทเอกสารจัดซื้อจัดจ้าง
+        </div>
       <div class="card-body p-4">
         <div class="row g-2 justify-content-center">
           <div class="col-12 col-md-4">
             <button type="button" class="btn btn-outline-navy w-100 py-3 nav-po-type active" onclick="switchPoTab('po', this)">
               <i class="bi bi-cart-check fs-3 d-block mb-1"></i>
-              <strong>ใบสั่งซื้อ (PO)</strong>
+              <strong>ใบสั่งซื้อ</strong>
             </button>
           </div>
           <div class="col-12 col-md-4">
             <button type="button" class="btn btn-outline-navy w-100 py-3 nav-po-type" onclick="switchPoTab('wo', this)">
               <i class="bi bi-tools fs-3 d-block mb-1"></i>
-              <strong>ใบสั่งจ้าง (WO)</strong>
+              <strong>ใบสั่งจ้าง</strong>
             </button>
           </div>
           <div class="col-12 col-md-4">
             <button type="button" class="btn btn-outline-navy w-100 py-3 nav-po-type" onclick="switchPoTab('fpo', this)">
               <i class="bi bi-fuel-pump fs-3 d-block mb-1"></i>
-              <strong>สั่งซื้อน้ำมัน (FPO)</strong>
+              <strong>สั่งซื้อน้ำมัน</strong>
             </button>
           </div>
         </div>
@@ -78,9 +78,9 @@
           <table class="table table-striped table-hover align-middle mb-0 text-center">
             <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
               <tr class="small align-middle">
-                <th>เลขที่สั่งซื้อ/จ้าง</th>
-                <th>วันที่ขอซื้อ (PR)</th>
-                <th>รายการ (Details)</th>
+                <th>เลขที่ใบสั่งซื้อ/จ้าง</th>
+                <th>วันที่ขอซื้อ</th>
+                <th>รายการ</th>
                 <th>ร้านค้า/ผู้ขาย</th>
                 <th>จำนวนเงิน (บาท)</th>
                 <th>ฝ่าย</th>
@@ -128,13 +128,13 @@
             <div class="col-md-6">
               <label class="form-label fw-bold">ประเภทเอกสาร <span class="text-danger">*</span></label>
               <select id="modal_doc_type" class="form-select" onchange="previewAutoPoNumber()" required>
-                <option value="po">ใบสั่งซื้อ (PO)</option>
-                <option value="wo">ใบสั่งจ้าง (WO)</option>
-                <option value="fpo">ใบสั่งซื้อน้ำมัน (FPO)</option>
+                <option value="po">ใบสั่งซื้อ</option>
+                <option value="wo">ใบสั่งจ้าง</option>
+                <option value="fpo">ใบสั่งซื้อน้ำมัน</option>
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label fw-bold">วันที่ขอซื้อ (PR Date) <span class="text-danger">*</span></label>
+              <label class="form-label fw-bold">วันที่ขอซื้อ<span class="text-danger">*</span></label>
               <input type="date" id="modal_pr_date" class="form-control" onchange="previewAutoPoNumber()" required>
             </div>
 
@@ -243,7 +243,7 @@
               <input type="text" id="edit_log_po" class="form-control bg-light fw-bold text-primary" readonly>
             </div>
             <div class="col-md-6">
-              <label class="form-label fw-bold">วันที่ขอซื้อ (PR Date) <span class="text-danger">*</span></label>
+              <label class="form-label fw-bold">วันที่ขอซื้อ<span class="text-danger">*</span></label>
               <input type="date" id="edit_pr_date" class="form-control" required>
             </div>
 

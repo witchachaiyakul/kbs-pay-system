@@ -13,6 +13,13 @@ import {
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+import { 
+  generateLogPoNumber, 
+  saveLogPoToFirestore, 
+  getLogPoDataFromFirestore, 
+  getHolidaysFromFirestore 
+} from "./log-pay.js";
+
 // 🌐 URL ของ Google Apps Script Web App Microservice (สำหรับออกเอกสาร Doc/PDF)
 const GAS_DOC_MICROSERVICE_URL = "https://script.google.com/macros/s/AKfycbwX653dlaUHJmpcq6y-UOYJlDkN7u7UZhGeqRV-egjEtMEDUk1O-EWm6Db7ZbD66HkAxQ/exec";
 const INTERNAL_SECRET_KEY = "witchachaiyakul"; // 🔑 รหัสลับสำหรับการสื่อสารกับ GAS Microservice
@@ -1602,7 +1609,17 @@ export async function submitForm() {
         } else if (methodVal.includes('น้ำมัน')) {
             poType = 'fpo';
         }
-        
+
+        // 🎯 ดึงค่าสำคัญที่ต้องใช้ล่วงหน้า (logNo, grandTotal, ฯลฯ) ให้เรียบร้อยก่อนประกอบ Object
+        const logNo = document.getElementById('logNoInput')?.value.trim() || '';
+        const deliveryDaysVal = parseInt(document.getElementById('deliveryDays')?.value, 10) || 7;
+        const grandTotal = document.getElementById('cal_grandtotal')?.value || '0.00';
+        const exVat = document.getElementById('cal_subtotal')?.value || '0.00';
+        const vatVal = document.getElementById('cal_vat')?.value || '0.00';
+        const taxVal = document.getElementById('cal_income_tax')?.value || '0.00';
+        const actPaid = document.getElementById('cal_act_paid')?.value || '0.00';
+
+        // 🎯 คำนวณรันเลข PO
         const existingPoNo = document.getElementById('po_no_hidden')?.value.trim() || '';
         let poGenerated = { log_po: '', base_no: 0, sub_no: 0, year_be: '' };
 
@@ -1614,24 +1631,20 @@ export async function submitForm() {
                 year_be: Number(document.getElementById('po_year_be_hidden')?.value) || (new Date().getFullYear() + 543)
             };
         } else {
-            if (typeof generateLogPoNumber === 'function') {
-                const holidays = window.allHolidays || window.holidays || [];
-                const poLogs = window.allPoLogs || [];
-                poGenerated = generateLogPoNumber(poType, prDate, poLogs, holidays);
-            }
+            // ดึงประวัติเพื่อคำนวณเลขรันวันทำการ
+            const holidays = window.allHolidays || (typeof getHolidaysFromFirestore === 'function' ? await getHolidaysFromFirestore() : []);
+            const poLogs = window.allPoLogs || (typeof getLogPoDataFromFirestore === 'function' ? await getLogPoDataFromFirestore() : []);
+            poGenerated = generateLogPoNumber(poType, prDate, poLogs, holidays);
         }
-
-        const deliveryDaysVal = parseInt(document.getElementById('deliveryDays')?.value, 10) || 7;
-        const logNo = document.getElementById('logNoInput')?.value.trim() || '';
 
         // 🎯 1. ดึงรายการพัสดุจากหน้าจอ
         const equipmentItems = [];
         const tableRows = document.querySelectorAll('#itemListBody tr').length;
         const maxRows = Math.max(
-                typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 0,
-                tableRows,
-                10 // อย่างน้อยอ่าน 10 แถวสำรองไว้
-            );
+            typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 0,
+            tableRows,
+            10
+        );
 
         for (let i = 1; i <= maxRows; i++) {
             const eqInput = document.getElementById(`list${i}`) || document.getElementsByName(`list${i}`)[0];
@@ -1659,13 +1672,41 @@ export async function submitForm() {
             }
         }
 
-        const grandTotal = document.getElementById('cal_grandtotal')?.value || '0.00';
-        const exVat = document.getElementById('cal_subtotal')?.value || '0.00';
-        const vatVal = document.getElementById('cal_vat')?.value || '0.00';
-        const taxVal = document.getElementById('cal_income_tax')?.value || '0.00';
-        const actPaid = document.getElementById('cal_act_paid')?.value || '0.00';
+        // 🎯 2. ประกอบข้อมูลและบันทึกลง log_po
+        const logPoRecord = {
+            log_po: poGenerated.log_po,
+            doc_type: poType,
+            base_no: poGenerated.base_no,
+            sub_no: poGenerated.sub_no,
+            year_be: poGenerated.year_be,
+            pr_date: prDate,
+            po_date: getDateVal('date_po', prDate),
+            log_no_ref: logNo,
+            details: document.getElementById('details')?.value || document.getElementById('objective')?.value || '',
+            total: parseFloat(String(grandTotal).replace(/,/g, '')) || 0,
+            division: document.getElementById('division')?.value || '',
+            seller: document.getElementById('seller_name')?.value || '',
+            seller2: document.getElementById('seller2')?.value.trim() || '',
+            seller3: document.getElementById('seller3')?.value.trim() || '',
+            taxid: document.getElementById('tax_id')?.value || '',
+            ad_ph: document.getElementById('tel_no')?.value || '',
+            ad_no: document.getElementById('address_no')?.value || '',
+            ad_m: document.getElementById('address_moo')?.value || '',
+            ad_rd: document.getElementById('address_road')?.value || '',
+            ad_tb: document.getElementById('address_subdistrict')?.value || '',
+            ad_mu: document.getElementById('address_district')?.value || '',
+            ad_pr: document.getElementById('address_province')?.value || '',
+            postid: Number(document.getElementById('zip_code')?.value) || 0,
+            bidder_name: document.getElementById('bidder_name')?.value || '',
+            is_manual: false,
+            created_at: prDate
+        };
 
-        // 🎯 2. โครงสร้างข้อมูลสำหรับ Firestore
+        if (typeof saveLogPoToFirestore === 'function') {
+            await saveLogPoToFirestore(logPoRecord);
+        }
+
+        // 🎯 3. โครงสร้างข้อมูลสำหรับ Firestore (log_pay)
         const payData = {
             row_number: document.getElementById('row_number')?.value || '0', 
             log_no: logNo,
@@ -1741,7 +1782,7 @@ export async function submitForm() {
             updatedAt: serverTimestamp()
         };
 
-        // 💾 3. บันทึกลง Firestore
+        // 💾 4. บันทึกลง Firestore (log_pay)
         const payDocRef = doc(db, "log_pay", logNo);
         await setDoc(payDocRef, payData, { merge: true });
 
@@ -1762,7 +1803,7 @@ export async function submitForm() {
 
         console.log("✅ บันทึกฐานข้อมูล Firestore เรียบร้อยแล้ว");
 
-        // 🎯 4. สั่งเรียก prepareDocDataForMicroservice เพื่อจัดชุดตัวแปรส่ง GAS ให้ครบสมบูรณ์ 100%
+        // 🎯 5. ส่งข้อมูลไปยัง GAS Web App Microservice เพื่อสร้างเอกสาร
         const finalDocData = await prepareDocDataForMicroservice(payData, equipmentItems);
 
         const gasPayload = {
@@ -1771,7 +1812,6 @@ export async function submitForm() {
             docData: finalDocData
         };
 
-        // 🚀 ยิง HTTP POST ไปยัง GAS Web App Microservice
         const response = await fetch(GAS_DOC_MICROSERVICE_URL, {
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -1780,13 +1820,12 @@ export async function submitForm() {
 
         const gasResult = await response.json();
 
-        // Restore UI Button State
         if (saveBtn) {
             saveBtn.innerHTML = originalBtnText;
             saveBtn.disabled = false;
         }
 
-        // 🎨 5. แสดงผลการทำงานสำเร็จบน UI
+        // 🎨 6. แสดงผลสำเร็จบน UI
         if (gasResult && gasResult.status === 'success') {
             let htmlContent = `
                 <div style="text-align: center; padding: 25px; background-color: #f0fff4; border: 2px solid #28a745; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">

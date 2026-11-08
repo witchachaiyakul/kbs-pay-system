@@ -1,14 +1,10 @@
-// js/budgetuse.js
 import { db } from "./firestore.js";
 import { 
     collection, 
     query, 
     where, 
     getDocs, 
-    getDoc,
     doc,
-    setDoc,
-    updateDoc,
     runTransaction,
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -19,11 +15,15 @@ import {
 window.budgetPlansCache = [];
 let currentSelectedActivity = null;
 
+// ตัวแปรสำหรับจัดการสภาวะการแก้ไขรายการ (Edit Mode)
+let currentEditingLogNo = null;
+let originalEditingAmount = 0;
+let disburseHistoryCache = [];
+
 // ============================================================================
 // 🛠️ HELPER FUNCTIONS
 // ============================================================================
 
-// ฟังก์ชันแปลงวันที่เป็นรูปแบบ dd-mm-yyyy (พ.ศ.)
 function formatThaiDateShort(dateVal) {
   if (!dateVal) return '-';
   
@@ -172,12 +172,7 @@ export function openDisburseModalCurrent() {
   const nameElem = document.getElementById('mdActivityName');
   if (nameElem) nameElem.innerText = item.activity_name || item.project_name || '-';
   
-  const form = document.getElementById('disburseForm');
-  if (form) form.reset();
-
-  document.getElementById('alertOverBudget')?.classList.add('d-none');
-  const btnSubmit = document.getElementById('btnSubmitDisburseDoc');
-  if (btnSubmit) btnSubmit.disabled = false;
+  cancelEditMode();
 
   const total = Number(item.total_budget || 0);
   const used = Number(item.used_budget || 0);
@@ -186,14 +181,14 @@ export function openDisburseModalCurrent() {
   document.getElementById('calcTotalBudget').innerText = total.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
   document.getElementById('calcUsedBudget').innerText = used.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
   document.getElementById('calcBeforeRemain').innerText = remain.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
-  document.getElementById('calcReqAmount').innerText = '0.00 ฿';
-  document.getElementById('calcAfterRemain').innerText = remain.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
+  
+  calculateDisburseBalance();
 
   loadDisburseHistory(item.id || item.project_id);
 
   const modalElem = document.getElementById('disburseModal');
   if (modalElem) {
-    const modal = new bootstrap.Modal(modalElem);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElem);
     modal.show();
   }
 }
@@ -201,39 +196,125 @@ export function openDisburseModalCurrent() {
 async function loadDisburseHistory(projectId) {
   const tbody = document.getElementById('mdDisburseHistoryBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">กำลังดึงข้อมูล...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">กำลังดึงข้อมูล...</td></tr>';
 
   try {
     const q = query(collection(db, "log_budget"), where("project_id", "==", String(projectId)));
     const qSnap = await getDocs(q);
 
+    disburseHistoryCache = [];
+
     if (!qSnap.empty) {
-      let html = '';
-      qSnap.forEach(docSnap => {
-        const h = docSnap.data();
+      qSnap.forEach(docSnap => disburseHistoryCache.push(docSnap.data()));
+
+      // เรียงตามเวลาจากล่าสุดไปหาเก่าสุด
+      disburseHistoryCache.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+
+      const html = disburseHistoryCache.map(h => {
+        const logNo = h.log_no || h.id || '-';
         const displayDate = formatThaiDateShort(h.createdAt || h.date);
         const method = h.method || h.purchase_type || '-';
         const details = h.details || h.remark || '-';
         const applicant = h.buyer || h.requested_by || h.applicant || '-';
         const amount = Number(h.budget_use || h.amount || 0);
 
-        html += `
-          <tr>
-            <td class="small fw-semibold text-nowrap">${displayDate}</td>
-            <td><span class="badge bg-secondary">${method}</span></td>
+        return `
+          <tr class="align-middle">
+            <td class="fw-bold text-primary text-nowrap"><i class="bi bi-file-earmark-text me-1"></i>${logNo}</td>
+            <td class="small fw-semibold text-nowrap text-center">${displayDate}</td>
+            <td class="text-center"><span class="badge bg-secondary">${method}</span></td>
             <td class="small">${details}</td>
             <td class="small">${applicant}</td>
-            <td class="text-end fw-bold text-danger">${amount.toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿</td>
+            <td class="text-end fw-bold text-danger text-nowrap">${amount.toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿</td>
+            <td class="text-center">
+              <button type="button" class="btn btn-warning btn-sm p-1 px-2 text-dark shadow-sm fw-bold" title="แก้ไขรายการนี้" onclick="editDisburseLog('${logNo}')">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+            </td>
           </tr>
         `;
-      });
+      }).join('');
+
       tbody.innerHTML = html;
     } else {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">ยังไม่เคยมีประวัติการตัดจ่ายในกิจกรรมนี้</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">ยังไม่เคยมีประวัติการตัดจ่ายในกิจกรรมนี้</td></tr>';
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-3 text-danger">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
   }
+}
+
+// 🎯 ฟังก์ชันดึงรายการเดิมมาแก้ไข + Auto Scroll ลงไปที่ฟอร์มด้านล่าง
+export function editDisburseLog(logNo) {
+  const item = disburseHistoryCache.find(h => String(h.log_no) === String(logNo));
+  if (!item) {
+    alert("❌ ไม่พบข้อมูลรายการที่เลือก");
+    return;
+  }
+
+  currentEditingLogNo = logNo;
+  originalEditingAmount = Number(item.budget_use || item.amount || 0);
+
+  // ใส่ค่าเดิมลงในฟอร์ม
+  document.getElementById('mdSelPurchase').value = item.method || item.purchase_type || 'ซื้อ';
+  document.getElementById('mdInpAmount').value = originalEditingAmount;
+  document.getElementById('mdSelCommittee').value = item.buyer || item.requested_by || item.applicant || '';
+  document.getElementById('mdInpRemark').value = item.details || item.remark || '';
+
+  // แสดงแถบสภาวะกำลังแก้ไข
+  const editNotice = document.getElementById('editModeNotice');
+  const editLabel = document.getElementById('editingLogNoLabel');
+  const modeTitle = document.getElementById('formModeTitle');
+  const btnSubmit = document.getElementById('btnSubmitDisburseDoc');
+
+  if (editNotice) editNotice.classList.remove('d-none');
+  if (editLabel) editLabel.innerText = logNo;
+  if (modeTitle) {
+    modeTitle.innerText = "โหมด: แก้ไขรายการเดิม (" + logNo + ")";
+    modeTitle.className = "badge bg-warning text-dark";
+  }
+  if (btnSubmit) {
+    btnSubmit.className = "btn btn-warning px-5 fw-bold shadow text-dark";
+    btnSubmit.innerHTML = `<i class="bi bi-save-fill me-1"></i> บันทึกการแก้ไขเอกสาร`;
+  }
+
+  calculateDisburseBalance();
+
+  // 🎯 เลื่อนหน้าจอลงไปยังฟอร์มแก้ไขด้านล่างแบบ Smooth
+  setTimeout(() => {
+    const formTarget = document.getElementById('disburseFormSection');
+    if (formTarget) {
+      formTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
+}
+
+export function cancelEditMode() {
+  currentEditingLogNo = null;
+  originalEditingAmount = 0;
+
+  const form = document.getElementById('disburseForm');
+  if (form) form.reset();
+
+  const editNotice = document.getElementById('editModeNotice');
+  const modeTitle = document.getElementById('formModeTitle');
+  const btnSubmit = document.getElementById('btnSubmitDisburseDoc');
+
+  if (editNotice) editNotice.classList.add('d-none');
+  if (modeTitle) {
+    modeTitle.innerText = "โหมด: สร้างรายการใหม่";
+    modeTitle.className = "badge bg-success";
+  }
+  if (btnSubmit) {
+    btnSubmit.className = "btn btn-navy px-5 fw-bold shadow";
+    btnSubmit.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i> ยืนยันและสร้างเอกสาร`;
+  }
+
+  calculateDisburseBalance();
 }
 
 export function calculateDisburseBalance() {
@@ -241,7 +322,9 @@ export function calculateDisburseBalance() {
 
   const remain = Number(currentSelectedActivity.remaining_budget || 0);
   const reqAmount = Number(document.getElementById('mdInpAmount')?.value || 0);
-  const afterRemain = remain - reqAmount;
+
+  const effectiveAmount = currentEditingLogNo ? (reqAmount - originalEditingAmount) : reqAmount;
+  const afterRemain = remain - effectiveAmount;
 
   const reqElem = document.getElementById('calcReqAmount');
   const afterElem = document.getElementById('calcAfterRemain');
@@ -266,39 +349,8 @@ export function calculateDisburseBalance() {
 }
 
 // ============================================================================
-// 3. LOG NO. GENERATOR & DISBURSEMENT SUBMISSION
+// 3. TRANSACTION & DISBURSEMENT SUBMISSION (NEW & EDIT)
 // ============================================================================
-
-// 🎯 กำหนดชื่อฟังก์ชัน getNextLogNo() ให้ตรงกับการเรียกใช้
-export async function getNextLogNo() {
-  const now = new Date();
-  const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-  const thaiYearFull = now.getFullYear() + 543;
-  const yearStr = String(thaiYearFull).slice(-2);
-  const docId = `${yearStr}${monthStr}`;
-  
-  const logNoRef = doc(db, "log_no", docId);
-
-  return await runTransaction(db, async (transaction) => {
-    const logDocSnap = await transaction.get(logNoRef);
-    let nextNum = 1;
-
-    if (logDocSnap.exists()) {
-      const data = logDocSnap.data();
-      nextNum = Number(data.last_number || 0) + 1;
-    }
-
-    transaction.set(logNoRef, {
-      last_number: nextNum,
-      month: monthStr,
-      year: yearStr,
-      updated_at: serverTimestamp()
-    }, { merge: true });
-
-    const paddedSeq = String(nextNum).padStart(4, '0');
-    return `นผ2${monthStr}${yearStr}${paddedSeq}`;
-  });
-}
 
 export async function submitDisbursePlanDoc() {
   if (!currentSelectedActivity) {
@@ -306,74 +358,132 @@ export async function submitDisbursePlanDoc() {
     return;
   }
 
+  const form = document.getElementById('disburseForm');
+  if (form && !form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+
   const purchaseType = document.getElementById('mdSelPurchase').value;
   const amount = Number(document.getElementById('mdInpAmount').value);
-  const applicant = document.getElementById('mdSelCommittee').value;
-  const remark = document.getElementById('mdInpRemark').value;
+  const applicant = document.getElementById('mdSelCommittee').value.trim();
+  const remark = document.getElementById('mdInpRemark').value.trim();
 
   if (!amount || amount <= 0) {
     alert('❌ กรุณากรอกจำนวนเงินขอตัดจ่ายให้ถูกต้อง');
-    return;
-  }
-  if (!applicant) {
-    alert('❌ กรุณากรอก/เลือก ผู้ขอใช้งบประมาณ');
     return;
   }
 
   const btnSubmit = document.getElementById('btnSubmitDisburseDoc');
   if (btnSubmit) {
     btnSubmit.disabled = true;
-    btnSubmit.innerHTML = '⏳ กำลังบันทึกข้อมูลและสร้าง PDF...';
+    btnSubmit.innerHTML = '⏳ กำลังบันทึกข้อมูล...';
   }
 
   try {
     const projectId = currentSelectedActivity.id || currentSelectedActivity.project_id;
     const planRef = doc(db, "budget_plans", projectId);
 
-    const planSnap = await getDoc(planRef);
-    if (!planSnap.exists()) {
-      throw new Error("ไม่พบข้อมูลโครงการในระบบ");
-    }
+    const now = new Date();
+    const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+    const yearStr = String(now.getFullYear() + 543).slice(-2);
+    const logNoDocId = `${yearStr}${monthStr}`;
+    const logNoRef = doc(db, "log_no", logNoDocId);
 
-    const currentPlanData = planSnap.data();
-    const oldTotal = Number(currentPlanData.total_budget || currentPlanData.budget_set || 0);
-    const oldUsed = Number(currentPlanData.used_budget || currentPlanData.budget_used || 0);
-    const oldRemain = oldTotal - oldUsed;
+    let logNo = currentEditingLogNo;
+    let balanceBefore = 0;
+    let balanceAfter = 0;
+    let oldTotal = 0;
+    let newUsedBudget = 0;
+    let newRemainBudget = 0;
 
-    if (oldRemain < amount) {
-      throw new Error("ยอดเงินคงเหลือไม่เพียงพอต่อการตัดจ่าย");
-    }
+    await runTransaction(db, async (transaction) => {
+      const planSnap = await transaction.get(planRef);
+      if (!planSnap.exists()) {
+        throw new Error("ไม่พบข้อมูลโครงการในระบบ");
+      }
 
-    // 1. ออกเลข นผ.2 ประจำเดือน
-    const logNo = await getNextLogNo();
+      const currentPlanData = planSnap.data();
+      oldTotal = Number(currentPlanData.total_budget || currentPlanData.budget_set || 0);
+      const oldUsed = Number(currentPlanData.used_budget || currentPlanData.budget_used || 0);
+      const currentRemain = oldTotal - oldUsed;
 
-    const balanceBefore = oldRemain;
-    const balanceAfter = balanceBefore - amount;
-    const newUsedBudget = oldUsed + amount;
-    const newRemainBudget = balanceAfter;
+      if (currentEditingLogNo) {
+        // === กรณีแก้ไขรายการเดิม (EDIT LOG) ===
+        const diffAmount = amount - originalEditingAmount;
+        if (currentRemain < diffAmount) {
+          throw new Error(`ยอดเงินคงเหลือไม่เพียงพอสำหรับการเพิ่มยอดตัดจ่าย (คงเหลือปัจจุบัน: ${currentRemain.toLocaleString()} บาท)`);
+        }
 
-    // 2. บันทึกข้อมูลลง collection log_budget ใน Firestore
-    const logBudgetRef = doc(db, "log_budget", logNo);
-    await setDoc(logBudgetRef, {
-      log_no: logNo,
-      project_id: projectId,
-      activities: currentSelectedActivity.activity_name || '-',
-      project_name: currentSelectedActivity.project_name || '-',
-      division: currentSelectedActivity.division || '-',
-      method: purchaseType,
-      buyer: applicant,
-      details: remark,
-      balance_before: balanceBefore,
-      budget_use: amount,
-      balance_after: balanceAfter,
-      status: "active",
-      createdAt: serverTimestamp()
-    });
+        const logBudgetRef = doc(db, "log_budget", currentEditingLogNo);
+        const logSnap = await transaction.get(logBudgetRef);
+        if (!logSnap.exists()) {
+          throw new Error("ไม่พบเอกสารการตัดจ่ายที่ต้องการแก้ไข");
+        }
 
-    // 3. อัปเดตยอดคงเหลือใน budget_plans
-    await updateDoc(planRef, {
-      used_budget: newUsedBudget,
-      remaining_budget: newRemainBudget
+        const logData = logSnap.data();
+        balanceBefore = Number(logData.balance_before || currentRemain + originalEditingAmount);
+        balanceAfter = balanceBefore - amount;
+        newUsedBudget = oldUsed + diffAmount;
+        newRemainBudget = oldTotal - newUsedBudget;
+
+        transaction.update(logBudgetRef, {
+          method: purchaseType,
+          buyer: applicant,
+          details: remark,
+          budget_use: amount,
+          balance_after: balanceAfter,
+          updatedAt: serverTimestamp()
+        });
+
+      } else {
+        // === กรณีสร้างรายการใหม่ (NEW LOG) ===
+        if (currentRemain < amount) {
+          throw new Error(`ยอดเงินคงเหลือไม่เพียงพอ (คงเหลือปัจจุบัน: ${currentRemain.toLocaleString()} บาท)`);
+        }
+
+        const logDocSnap = await transaction.get(logNoRef);
+        let nextNum = 1;
+        if (logDocSnap.exists()) {
+          nextNum = Number(logDocSnap.data().last_number || 0) + 1;
+        }
+        const paddedSeq = String(nextNum).padStart(4, '0');
+        logNo = `นผ2${monthStr}${yearStr}${paddedSeq}`;
+
+        balanceBefore = currentRemain;
+        balanceAfter = balanceBefore - amount;
+        newUsedBudget = oldUsed + amount;
+        newRemainBudget = balanceAfter;
+
+        transaction.set(logNoRef, {
+          last_number: nextNum,
+          month: monthStr,
+          year: yearStr,
+          updated_at: serverTimestamp()
+        }, { merge: true });
+
+        const logBudgetRef = doc(db, "log_budget", logNo);
+        transaction.set(logBudgetRef, {
+          log_no: logNo,
+          project_id: projectId,
+          activities: currentSelectedActivity.activity_name || '-',
+          project_name: currentSelectedActivity.project_name || '-',
+          division: currentSelectedActivity.division || '-',
+          method: purchaseType,
+          buyer: applicant,
+          details: remark,
+          balance_before: balanceBefore,
+          budget_use: amount,
+          balance_after: balanceAfter,
+          status: "active",
+          createdAt: serverTimestamp()
+        });
+      }
+
+      transaction.update(planRef, {
+        used_budget: newUsedBudget,
+        remaining_budget: newRemainBudget
+      });
     });
 
     if (currentSelectedActivity) {
@@ -381,8 +491,6 @@ export async function submitDisbursePlanDoc() {
       currentSelectedActivity.remaining_budget = newRemainBudget;
     }
 
-    // 🎯 4. เตรียม Payload บริสุทธิ์ส่งให้ Google Apps Script (ยึดตามโครงสร้าง Google Sheets Template)
-    const now = new Date();
     const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
     const formattedDate = `${now.getDate()} ${thaiMonths[now.getMonth()]} พ.ศ. ${now.getFullYear() + 543}`;
 
@@ -414,8 +522,6 @@ export async function submitDisbursePlanDoc() {
     let pdfUrl = null;
     const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwX653dlaUHJmpcq6y-UOYJlDkN7u7UZhGeqRV-egjEtMEDUk1O-EWm6Db7ZbD66HkAxQ/exec";
 
-    console.log("📤 [Frontend Log 1] Payload to GAS:", pdfPayload);
-
     if (APPS_SCRIPT_WEB_APP_URL && !APPS_SCRIPT_WEB_APP_URL.includes("YOUR_SCRIPT_ID")) {
       try {
         const response = await fetch(APPS_SCRIPT_WEB_APP_URL, {
@@ -424,21 +530,15 @@ export async function submitDisbursePlanDoc() {
           body: JSON.stringify(pdfPayload)
         });
 
-        console.log("📥 [Frontend Log 2] HTTP Response Status:", response.status);
         const resJson = await response.json();
-        console.log("📥 [Frontend Log 3] Parsed Response JSON:", resJson);
-
         if (resJson && (resJson.pdfUrl || resJson.status === 'success')) {
           pdfUrl = resJson.pdfUrl;
-        } else {
-          console.warn("⚠️ [Frontend Warning] GAS returned no pdfUrl:", resJson);
         }
       } catch (errPdf) {
-        console.error("❌ [Frontend Error] Fetch to GAS failed:", errPdf);
+        console.error("❌ Fetch to GAS failed:", errPdf);
       }
     }
 
-    // 🎯 5. ปรับการปลดล็อกปุ่มเปิด PDF (#btnOpenPdf)
     const btnPdf = document.getElementById('btnOpenPdf');
     if (btnPdf) {
       if (pdfUrl) {
@@ -455,17 +555,19 @@ export async function submitDisbursePlanDoc() {
       }
     }
 
-    // ซ่อน Modal ฟอร์ม และแสดง Success Modal
     const modalEl = document.getElementById('disburseModal');
     const modal = bootstrap.Modal.getInstance(modalEl);
     if (modal) modal.hide();
 
+    const isEditMode = Boolean(currentEditingLogNo);
+    cancelEditMode();
+
+    document.getElementById('successModalTitle').innerText = isEditMode ? "แก้ไขรายการสำเร็จ!" : "ตัดแผนสำเร็จ!";
     document.getElementById('successLogNo').innerText = logNo;
     
     const successModal = new bootstrap.Modal(document.getElementById('disburseSuccessModal'));
     successModal.show();
 
-    // รีเฟรชตารางตามฝ่ายเดิม
     const currentDept = document.getElementById('selectedDeptName').innerText || 'ทั้งหมด';
     filterByDept(currentDept);
 
@@ -474,7 +576,6 @@ export async function submitDisbursePlanDoc() {
   } finally {
     if (btnSubmit) {
       btnSubmit.disabled = false;
-      btnSubmit.innerHTML = '<i class="bi bi-file-earmark-check-fill me-1"></i> ยืนยันและสร้างเอกสาร';
     }
   }
 }
@@ -487,7 +588,6 @@ export function resetAndReopenDisburse() {
   const successModal = bootstrap.Modal.getInstance(document.getElementById('disburseSuccessModal'));
   if (successModal) successModal.hide();
 
-  // 🎯 เรียกเปิด Modal โดยอิงจาก ID เพื่อดึงข้อมูลล่าสุดเสมอ
   if (currentSelectedActivity) {
     const projId = currentSelectedActivity.project_id || currentSelectedActivity.id;
     openDisburseModalById(projId);
@@ -509,5 +609,7 @@ window.filterByDept = filterByDept;
 window.openDisburseModalById = openDisburseModalById;
 window.calculateDisburseBalance = calculateDisburseBalance;
 window.submitDisbursePlanDoc = submitDisbursePlanDoc;
+window.editDisburseLog = editDisburseLog;
+window.cancelEditMode = cancelEditMode;
 window.resetFormToMain = resetFormToMain;
 window.resetAndReopenDisburse = resetAndReopenDisburse;

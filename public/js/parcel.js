@@ -16,11 +16,69 @@ import {
 // ============================================================================
 let allParcelsCache = []; // เก็บรายการพัสดุที่แตกแถว (Expanded Units)
 let fundTypeCache = {};
+let assetCategoriesCache = [];
 // ============================================================================
 // 🔍 1. ดึงข้อมูลจาก log_pay เพื่อนำไปบริหารพัสดุ (Backend)
 // ============================================================================
 // Global Cache สำหรับเก็บ Map [ชื่อประเภทเงิน -> คำย่อ] (เช่น "เงินบริจาค": "บร.")
 
+export async function loadAssetCategories() {
+  try {
+    const snap = await getDocs(collection(db, "asset"));
+    const list = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        name: data.name || data.category_name || docSnap.id,
+        name_id: data.name_id || "01",
+        subcategories: Array.isArray(data.subcategories) ? data.subcategories : []
+      });
+    });
+    assetCategoriesCache = list;
+    
+    // 🎯 เติมข้อมูลใส่ Dropdown ส่วนหัวตาราง
+    populateHeaderAssetDropdown();
+
+    console.log("✅ โหลดหมวดหมู่ assets และ subcategories สำเร็จ:", assetCategoriesCache);
+  } catch (err) {
+    console.error("❌ โหลดข้อมูลหมวดหมู่ assets ล้มเหลว:", err);
+  }
+}
+
+// 🎯 ฟังก์ชันทำงานเมื่อเลือกหมวดหมู่หลัก -> สร้างตัวเลือกหมวดหมู่ย่อย (subcategories)
+export function onMainAssetChange(selectElem, uid) {
+  const assetId = selectElem.value;
+  const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+  
+  if (!subcatSelect) return;
+
+  if (!assetId) {
+    subcatSelect.innerHTML = `<option value="">-- เลือกหมวดหมู่ย่อย --</option>`;
+    subcatSelect.disabled = true;
+    updateAllParcelPreviews();
+    return;
+  }
+
+  const selectedAsset = assetCategoriesCache.find(a => a.id === assetId);
+  const subList = selectedAsset ? selectedAsset.subcategories : [];
+
+  if (subList.length > 0) {
+    const options = subList.map(sub => {
+      const subCode = sub.code || sub.subcategories_code || "01";
+      const subName = sub.name || sub.subcategories_name || subCode;
+      return `<option value="${subCode}">${subName} (${subCode})</option>`;
+    }).join('');
+
+    subcatSelect.innerHTML = `<option value="">-- เลือกหมวดหมู่ย่อย --</option>` + options;
+    subcatSelect.disabled = false;
+  } else {
+    subcatSelect.innerHTML = `<option value="01">ทั่วไป (01)</option>`;
+    subcatSelect.disabled = false;
+  }
+
+  updateAllParcelPreviews();
+}
 
 /**
  * 🔄 ดึงข้อมูลประเภทเงินทั้งหมดจาก Collection "fund_type" บน Firestore
@@ -106,42 +164,97 @@ export async function getLogPayForParcels(logNo) {
 // ============================================================================
 // 🏷️ 2. ออกเลขพัสดุอัตโนมัติ (Backend)
 // ============================================================================
-export async function generateParcelNumbersBackend(uids, fundType, yearBE) {
+export async function generateParcelNumbersBackend(selectedItems, fundType, yearBE) {
   try {
-    if (!uids || !Array.isArray(uids) || uids.length === 0) {
+    if (!selectedItems || selectedItems.length === 0) {
       return { success: false, message: 'ไม่ได้เลือกรายการพัสดุ' };
     }
 
-    const counterDocId = `parcel_counter_${fundType}_${yearBE}`;
-    const counterRef = doc(db, "counters", counterDocId);
-    const counterSnap = await getDoc(counterRef);
-    let currentSeq = 0;
+    const year2Digits = String(yearBE).slice(-2); // เช่น "69" หรือ "70"
 
-    if (counterSnap.exists()) {
-      currentSeq = Number(counterSnap.data().seq) || 0;
-    }
+    // จัดกลุ่มรายการที่จะออกเลขตาม log_no
+    const logNoGroups = {};
+    selectedItems.forEach(item => {
+      if (!logNoGroups[item.log_no]) {
+        logNoGroups[item.log_no] = [];
+      }
+      logNoGroups[item.log_no].push(item);
+    });
 
-    for (const uid of uids) {
-      currentSeq++;
-      const formattedSeq = String(currentSeq).padStart(4, '0');
-      const generatedParcelNo = `${fundType}/${formattedSeq}/${yearBE}`;
-      const logNo = uid.split('_')[0];
+    await runTransaction(db, async (transaction) => {
+      for (const logNo of Object.keys(logNoGroups)) {
+        const itemsToProcess = logNoGroups[logNo];
+        const logParcelRef = doc(db, "log_parcels", logNo);
+        const logParcelSnap = await transaction.get(logParcelRef);
 
-      const parcelData = {
-        uid: uid,
-        log_no_ref: logNo,
-        parcel_no: generatedParcelNo,
-        status: 'registered',
-        fund_type: fundType,
-        year_be: yearBE,
-        created_at: new Date().toISOString()
-      };
+        let existingParcelArray = [];
+        if (logParcelSnap.exists() && Array.isArray(logParcelSnap.data().parcel_no)) {
+          existingParcelArray = [...logParcelSnap.data().parcel_no];
+        }
 
-      const parcelRef = doc(db, "log_parcels", uid);
-      await setDoc(parcelRef, parcelData, { merge: true });
-    }
+        for (const item of itemsToProcess) {
+          const subcatCode = item.subcategories_code || "01";
+          const nameId = item.name_id || "01";
 
-    await setDoc(counterRef, { seq: currentSeq, updated_at: new Date().toISOString() }, { merge: true });
+          // 🎯 Collection ตรงกลางนับจำนวนชิ้นตามประเภทและปี: asset_counters/{subcatCode}_{year2Digits}
+          const counterDocId = `${nameId}_${subcatCode}_${year2Digits}`;
+          const counterRef = doc(db, "asset_counters", counterDocId);
+          const counterSnap = await transaction.get(counterRef);
+
+          let currentSeq = 0;
+          if (counterSnap.exists()) {
+            currentSeq = Number(counterSnap.data().seq) || 0;
+          }
+          currentSeq++;
+
+          // 🎯 ออกเลขพัสดุรูปแบบ: กภกบ.{name_id}-{subcategories_code}-{seq}/{year2Digits}
+          const seqFormatted = String(currentSeq).padStart(2, '0'); // หรือ 4 หลัก ตามต้องการ
+          const generatedParcelNo = `กภกบ.${nameId}-${subcatCode}-${seqFormatted}/${year2Digits}`;
+
+          // อัปเดตคาวน์เตอร์ตัวนับ
+          transaction.set(counterRef, {
+            name_id: nameId,
+            subcategories_code: subcatCode,
+            year_be_short: year2Digits,
+            seq: currentSeq,
+            updated_at: serverTimestamp()
+          }, { merge: true });
+
+          // เพิ่มหรืออัปเดต Map ใน Array parcel_no
+          const newParcelMapObj = {
+            id: generatedParcelNo,
+            uid: item.uid,
+            asset_id: item.asset_id,
+            name_id: nameId,
+            subcategories_code: subcatCode,
+            item_name: item.item_name,
+            unit_index: item.unit_index,
+            unit_price: item.unit_price,
+            unit_name: item.unit_name,
+            status: "registered",
+            issued_to: "",
+            issued_date: ""
+          };
+
+          const existingIdx = existingParcelArray.findIndex(p => p.uid === item.uid);
+          if (existingIdx >= 0) {
+            existingParcelArray[existingIdx] = newParcelMapObj;
+          } else {
+            existingParcelArray.push(newParcelMapObj);
+          }
+        }
+
+        // 🎯 บันทึกเอกสารลง log_parcels โดยตั้งชื่อ document ตาม log_no
+        transaction.set(logParcelRef, {
+          created_at: new Date().toISOString(),
+          fund_type: fundType,
+          log_no_ref: logNo,
+          status: "registered",
+          year_be: yearBE,
+          parcel_no: existingParcelArray
+        }, { merge: true });
+      }
+    });
 
     return { success: true, message: 'ออกเลขพัสดุสำเร็จ' };
   } catch (err) {
@@ -153,25 +266,51 @@ export async function generateParcelNumbersBackend(uids, fundType, yearBE) {
 // ============================================================================
 // 📤 3. บันทึกการเบิกจ่ายพัสดุ (Backend)
 // ============================================================================
-export async function issueParcelsBackend(uids, recipient, issueDate) {
+export async function issueParcelsBackend(selectedUids, recipient, issueDate) {
   try {
-    if (!uids || !Array.isArray(uids) || uids.length === 0) {
+    if (!selectedUids || selectedUids.length === 0) {
       return { success: false, message: 'ไม่ได้เลือกรายการพัสดุที่ต้องการเบิก' };
     }
 
     const targetDate = issueDate || new Date().toISOString().split('T')[0];
 
-    for (const uid of uids) {
-      const issueData = {
-        status: 'issued',
-        issued_to: recipient,
-        issued_date: targetDate,
-        updated_at: new Date().toISOString()
-      };
+    // จัดกลุ่มตาม log_no
+    const logNoGroups = {};
+    selectedUids.forEach(uid => {
+      const logNo = uid.split('_')[0];
+      if (!logNoGroups[logNo]) logNoGroups[logNo] = [];
+      logNoGroups[logNo].push(uid);
+    });
 
-      const parcelRef = doc(db, "log_parcels", uid);
-      await updateDoc(parcelRef, issueData);
-    }
+    await runTransaction(db, async (transaction) => {
+      for (const logNo of Object.keys(logNoGroups)) {
+        const uidsInLog = logNoGroups[logNo];
+        const logParcelRef = doc(db, "log_parcels", logNo);
+        const logParcelSnap = await transaction.get(logParcelRef);
+
+        if (logParcelSnap.exists()) {
+          const data = logParcelSnap.data();
+          const parcelArray = Array.isArray(data.parcel_no) ? [...data.parcel_no] : [];
+
+          parcelArray.forEach(p => {
+            if (uidsInLog.includes(p.uid)) {
+              p.status = 'issued';
+              p.issued_to = recipient;
+              p.issued_date = targetDate;
+            }
+          });
+
+          // ตรวจสอบว่าถ้าเบิกจ่ายครบทุกชิ้นแล้ว ให้เปลี่ยน status รวมของเอกสารเป็น issued
+          const allIssued = parcelArray.every(p => p.status === 'issued');
+
+          transaction.update(logParcelRef, {
+            parcel_no: parcelArray,
+            status: allIssued ? 'issued' : data.status,
+            updated_at: serverTimestamp()
+          });
+        }
+      }
+    });
 
     return { success: true, message: 'บันทึกการเบิกจ่ายเรียบร้อย' };
   } catch (err) {
@@ -184,17 +323,17 @@ export async function issueParcelsBackend(uids, recipient, issueDate) {
 // 🖥️ 4. FRONTEND UI & DATA LOADING
 // ============================================================================
 
-/**
- * 🔄 โหลดข้อมูลพัสดุจาก log_pay และผูกสถานะเดิมจาก log_parcels
- */
 export async function loadParcelDataFromLogPay(isRefresh = false) {
   const tbody = document.getElementById("parcelTableBody");
-  const searchLogNo = document.getElementById("parcelSearchLogNo")?.value || "";
+  const searchLogNo = (document.getElementById("parcelSearchLogNo")?.value || "").trim().toLowerCase();
+  
+  // 🎯 ดึงสถานะที่เลือก หากยังไม่เลือกให้ Default เป็น "pending"
+  const currentStatusFilter = document.getElementById("parcelFilterStatus")?.value || "pending";
 
   if (tbody) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center py-4 text-muted">
+        <td colspan="11" class="text-center py-4 text-muted">
           <div class="spinner-border spinner-border-sm text-primary me-2"></div> กำลังดึงและประมวลผลรายการพัสดุ...
         </td>
       </tr>
@@ -202,43 +341,101 @@ export async function loadParcelDataFromLogPay(isRefresh = false) {
   }
 
   try {
-    // 1. ดึงข้อมูล log_pay
-    const logPayRes = await getLogPayForParcels(searchLogNo);
-    if (!logPayRes.success || !logPayRes.data || logPayRes.data.length === 0) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-muted">ไม่พบข้อมูลเอกสาร นผ.2</td></tr>`;
-      allParcelsCache = [];
-      updateSelectionCounts();
-      return;
+    if (assetCategoriesCache.length === 0) {
+      await loadAssetCategories();
     }
 
-    // 2. ดึงข้อมูลสถานะเลขพัสดุที่เคยออกไว้จาก log_parcels
-    const parcelMap = {};
-    const parcelSnap = await getDocs(collection(db, "log_parcels"));
-    parcelSnap.forEach(d => {
-      parcelMap[d.id] = d.data();
-    });
-
     const expandedList = [];
+    const registeredUidSet = new Set();
     const recipientOptions = new Set();
 
-    // 3. วนลูปแตกรายการพัสดุตามจำนวนชิ้น (Expanded Parcels)
+    // ------------------------------------------------------------------------
+    // 1. ดึงข้อมูลจาก log_parcels (กรณีเลือก: registered, issued หรือ ดูทุกสถานะ)
+    // ------------------------------------------------------------------------
+    if (currentStatusFilter === "registered" || currentStatusFilter === "issued" || currentStatusFilter === "") {
+      const parcelSnap = await getDocs(collection(db, "log_parcels"));
+      parcelSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        const logNo = data.log_no_ref || docSnap.id;
+        const division = data.division || '-';
+        const parcelArray = Array.isArray(data.parcel_no) ? data.parcel_no : [];
+
+        parcelArray.forEach(p => {
+          if (p.uid) registeredUidSet.add(p.uid);
+          if (p.issued_to) recipientOptions.add(p.issued_to);
+
+          const pStatus = p.status || data.status || 'registered';
+
+          // กรองข้อมูลเฉพาะสถานะที่เลือก
+          if (!currentStatusFilter || pStatus === currentStatusFilter) {
+            expandedList.push({
+              uid: p.uid || `${logNo}_registered_${Math.random()}`,
+              log_no: logNo,
+              division: p.division || division,
+              cr_date: p.cr_date || data.cr_date || formatThaiDateShort(data.created_at) || '-',
+              item_name: p.item_name || 'พัสดุ',
+              unit_index: p.unit_index || '1/1',
+              unit_price: Number(p.unit_price || 0),
+              unit_name: p.unit_name || 'รายการ',
+              selected_asset_id: p.asset_id || '',
+              parcel_no_str: p.id || p.parcel_no || '-',
+              status: pStatus,
+              issued_to: p.issued_to || '',
+              issued_date: p.issued_date || ''
+            });
+          }
+        });
+      });
+    } else {
+      // ถ้าเลือก "pending" ให้เก็บ UID ที่ออกเลขไปแล้วก่อน เพื่อไม่ให้ดึงมาแสดงซ้ำ
+      const parcelSnap = await getDocs(collection(db, "log_parcels"));
+      parcelSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        const parcelArray = Array.isArray(data.parcel_no) ? data.parcel_no : [];
+        parcelArray.forEach(p => {
+          if (p.uid) registeredUidSet.add(p.uid);
+        });
+      });
+    }
+
+    // ------------------------------------------------------------------------
+    // 2. ดึงข้อมูลจาก log_pay (กรณีเลือก: pending หรือ ดูทุกสถานะ)
+    // ------------------------------------------------------------------------
+if (currentStatusFilter === "pending" || currentStatusFilter === "") {
+  const logPayRes = await getLogPayForParcels(document.getElementById("parcelSearchLogNo")?.value || "");
+  if (logPayRes.success && Array.isArray(logPayRes.data)) {
     logPayRes.data.forEach(payDoc => {
       const logNo = payDoc.log_no || payDoc.id;
-      const division = payDoc.division || '-';
-      const crDate = payDoc.cr_date || payDoc.date || '-';
+      const division = payDoc.division || payDoc.dept || payDoc.department || payDoc.ฝ่าย || '-';
+      
+      // ✅ 1. ดึงวันตรวจรับจาก cr_date หรือ date
+      let crDate = '-';
+      if (payDoc.cr_date && payDoc.cr_date !== 'cr_date') {
+        crDate = payDoc.cr_date;
+      } else if (payDoc.date) {
+        crDate = payDoc.date;
+      } else if (payDoc.createdAt) {
+        crDate = formatThaiDateShort(payDoc.createdAt);
+      }
 
+      // ดึงรายชื่อคณะกรรมการ/ผู้ขาย
+      if (payDoc.sell_name) recipientOptions.add(payDoc.sell_name);
       if (payDoc.buyer) recipientOptions.add(payDoc.buyer);
+      if (payDoc.applicant) recipientOptions.add(payDoc.applicant);
       if (Array.isArray(payDoc.committee)) {
         payDoc.committee.forEach(c => {
           if (c.name) recipientOptions.add(c.name);
         });
       }
 
-      // ดึงรายการสิ่งของ
+      // ✅ 2. ดึงรายการสิ่งของจากฟิลด์ items (Array of Map) เป็นอันดับแรก
       let items = [];
-      if (Array.isArray(payDoc.equipmentItems) && payDoc.equipmentItems.length > 0) {
+      if (Array.isArray(payDoc.items) && payDoc.items.length > 0) {
+        items = payDoc.items; // ดึงจาก items [ { list, equipment, qu, pr, un, am }, ... ]
+      } else if (Array.isArray(payDoc.equipmentItems) && payDoc.equipmentItems.length > 0) {
         items = payDoc.equipmentItems;
       } else {
+        // Fallback กรณีเป็นฟิลด์รายข้อ list1..list50
         for (let i = 1; i <= 50; i++) {
           if (payDoc[`list${i}`]) {
             items.push({
@@ -251,56 +448,63 @@ export async function loadParcelDataFromLogPay(isRefresh = false) {
         }
       }
 
-      // Fallback ถ้าไม่มีรายการแยกย่อย
+      // ✅ 3. Fallback กรณีไม่มีรายการแยกย่อย (ดึงจากฟิลด์ to หรือ details)
       if (items.length === 0) {
+        const detailName = payDoc.to || payDoc.details || payDoc.activities || payDoc.project_name || payDoc.remark || 'พัสดุจัดซื้อ';
+        const priceVal = payDoc.financial?.total || payDoc.budget_use || payDoc.amount || payDoc.total || payDoc.price || 0;
         items.push({
-          list: payDoc.details || payDoc.activities || 'พัสดุจัดซื้อ',
-          qu: payDoc.quantity || 1,
-          pr: payDoc.budget_use || payDoc.total || 0,
-          un: 'รายการ'
+          list: detailName,
+          qu: payDoc.quantity || payDoc.qty || 1,
+          pr: priceVal,
+          un: payDoc.unit || payDoc.unit_name || 'รายการ'
         });
       }
 
-      // แตกรายการตามจำนวนชิ้น
+            // ✅ 4. แตกรายการพัสดุตามจำนวนชิ้น (qu)
       items.forEach((item, itemIdx) => {
         const qty = parseInt(item.qu, 10) || 1;
-        const itemName = item.list || 'พัสดุ';
+        const itemName = item.list || item.equipment || 'พัสดุ';
         const price = parseFloat(item.pr) || 0;
         const unit = item.un || 'หน่วย';
 
+        // 🎯 ดึง pr_type (ตรวจสอบว่าตรงกับ "จ้าง" หรือไม่ ถ้าไม่ใช่ให้แสดงเป็น "ซื้อ")
+        const rawPrType = item.pr_type || payDoc.method || payDoc.purchase_type || 'ซื้อ';
+        const cleanPrType = String(rawPrType).includes('จ้าง') ? 'จ้าง' : 'ซื้อ';
+
         for (let u = 1; u <= qty; u++) {
           const uid = `${logNo}_item${itemIdx + 1}_unit${u}`;
-          const existing = parcelMap[uid] || {};
 
-          expandedList.push({
-            uid: uid,
-            log_no: logNo,
-            division: division,
-            cr_date: crDate,
-            item_name: itemName,
-            unit_index: `${u}/${qty}`,
-            unit_price: price,
-            unit_name: unit,
-            parcel_no: existing.parcel_no || '-',
-            status: existing.status || 'pending',
-            issued_to: existing.issued_to || '',
-            issued_date: existing.issued_date || ''
-          });
+          if (!registeredUidSet.has(uid)) {
+            expandedList.push({
+              uid: uid,
+              log_no: logNo,
+              division: division,
+              cr_date: crDate,
+              pr_type: cleanPrType, // 🎯 เพิ่มฟิลด์ pr_type
+              item_name: itemName,
+              unit_index: `${u}/${qty}`,
+              unit_price: price,
+              unit_name: unit,
+              selected_asset_id: '',
+              parcel_no_str: '-',
+              status: 'pending',
+              issued_to: '',
+              issued_date: ''
+            });
+          }
         }
       });
     });
+  }
+}
 
     allParcelsCache = expandedList;
-
-    // เติมรายชื่อผู้รับเบิกใน Modal
     populateRecipientOptions(Array.from(recipientOptions));
-
-    // แสดงผลในตาราง
     filterParcelTable();
 
   } catch (err) {
     console.error("❌ Error loadParcelDataFromLogPay:", err);
-    if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
   }
 }
 
@@ -347,7 +551,7 @@ function renderParcelTable(list) {
   if (!tbody) return;
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-muted">ไม่พบรายการพัสดุที่ตรงตามเงื่อนไข</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-muted">ไม่พบรายการพัสดุที่ตรงตามเงื่อนไข</td></tr>`;
     updateSelectionCounts();
     return;
   }
@@ -364,22 +568,64 @@ function renderParcelTable(list) {
 
     const formattedPrice = Number(item.unit_price).toLocaleString('th-TH', { minimumFractionDigits: 2 });
 
+    // ตัวเลือกหมวดหมู่หลัก
+    const categoryOptions = assetCategoriesCache.map(cat => {
+      const selected = item.selected_asset_id === cat.id ? 'selected' : '';
+      return `<option value="${cat.id}" data-nameid="${cat.name_id}" ${selected}>${cat.name} (${cat.name_id})</option>`;
+    }).join('');
+
+    // สร้างตัวเลือกหมวดหมู่ย่อยเดิม (กรณีดึงมาจากประวัติเก่า)
+    let subcatOptions = `<option value="">-- เลือกหมวดหมู่ย่อย --</option>`;
+    let subcatDisabled = 'disabled';
+
+    if (item.selected_asset_id) {
+      const selectedAsset = assetCategoriesCache.find(a => a.id === item.selected_asset_id);
+      if (selectedAsset && selectedAsset.subcategories.length > 0) {
+        subcatOptions += selectedAsset.subcategories.map(sub => {
+          const subCode = sub.code || sub.subcategories_code || "01";
+          const subName = sub.name || sub.subcategories_name || subCode;
+          const selected = item.subcategories_code === subCode ? 'selected' : '';
+          return `<option value="${subCode}" ${selected}>${subName} (${subCode})</option>`;
+        }).join('');
+        subcatDisabled = '';
+      }
+    }
+
+    const isInputDisabled = item.status !== 'pending' ? 'disabled' : '';
+
+    const prTypeBadge = item.pr_type === 'จ้าง' 
+      ? `<span class="badge bg-warning text-dark fw-bold">จ้าง</span>` 
+      : `<span class="badge bg-info text-dark fw-bold">ซื้อ</span>`;
+
     return `
-      <tr>
-        <td class="text-center">
-          <input type="checkbox" class="parcel-checkbox" data-uid="${item.uid}" data-status="${item.status}" onchange="onParcelCheckboxChange()">
-        </td>
-        <td class="text-center fw-bold text-primary">${item.log_no}</td>
-        <td class="small">${item.division}</td>
-        <td class="text-center small">${item.cr_date}</td>
-        <td class="fw-bold">${item.item_name}</td>
-        <td class="text-center small">${item.unit_index}</td>
-        <td class="text-end fw-bold">${formattedPrice}</td>
-        <td class="text-center small">${item.unit_name}</td>
-        <td class="text-center fw-bold text-dark">${item.parcel_no}</td>
-        <td class="text-center">${statusBadge}</td>
-      </tr>
-    `;
+  <tr>
+    <td class="text-center">
+      <input type="checkbox" class="parcel-checkbox" data-uid="${item.uid}" data-logno="${item.log_no}" data-status="${item.status}" onchange="onParcelCheckboxChange()">
+    </td>
+    <td class="text-center fw-bold text-primary">${item.log_no}</td>
+    <td class="small">${item.division}</td>
+    <td class="text-center small">${item.cr_date}</td>
+    <td class="text-center">${prTypeBadge}</td>
+    <td class="fw-bold">${item.item_name}</td>
+    <td class="text-center small">${item.unit_index}</td>
+    <td>
+      <!-- Select 1: หมวดหมู่หลัก -->
+      <select class="form-select form-select-sm parcel-asset-select mb-1" data-uid="${item.uid}" onchange="onMainAssetChange(this, '${item.uid}')" ${isInputDisabled}>
+        <option value="">-- เลือกหมวดหมู่หลัก --</option>
+        ${categoryOptions}
+      </select>
+      <!-- Select 2: หมวดหมู่ย่อย (เมื่อเปลี่ยนจะคำนวณเลขพรีวิวทันที) -->
+      <select class="form-select form-select-sm parcel-subcat-select" data-uid="${item.uid}" onchange="previewParcelNumber('${item.uid}')" ${subcatDisabled} ${isInputDisabled}>
+        ${subcatOptions}
+      </select>
+    </td>
+    <td class="text-end fw-bold">${formattedPrice}</td>
+    <td class="text-center small">${item.unit_name}</td>
+    <!-- 🎯 เพิ่ม class parcel-no-display และ data-uid เพื่อแสดงผลเลขพรีวิว -->
+    <td class="text-center fw-bold text-dark parcel-no-display" data-uid="${item.uid}">${item.parcel_no_str}</td>
+    <td class="text-center">${statusBadge}</td>
+  </tr>
+`;
   }).join('');
 
   const selectAll = document.getElementById("selectAllParcels");
@@ -440,13 +686,53 @@ export async function confirmGenerateParcelIDs() {
     return;
   }
 
-  const uids = pendingBoxes.map(cb => cb.dataset.uid);
+  const selectedItems = [];
+  let missingCategory = false;
+
+  pendingBoxes.forEach(cb => {
+    const uid = cb.dataset.uid;
+    const logNo = cb.dataset.logno;
+    const cacheItem = allParcelsCache.find(i => i.uid === uid);
+    
+    const mainSelect = document.querySelector(`.parcel-asset-select[data-uid="${uid}"]`);
+    const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+    
+    const mainOpt = mainSelect ? mainSelect.options[mainSelect.selectedIndex] : null;
+    const subcatCode = subcatSelect ? subcatSelect.value : "";
+
+    if (!mainSelect || !mainSelect.value || !subcatCode) {
+      missingCategory = true;
+    } else {
+      selectedItems.push({
+        uid: uid,
+        log_no: logNo,
+        item_name: cacheItem?.item_name || 'พัสดุ',
+        unit_index: cacheItem?.unit_index || '1/1',
+        unit_price: cacheItem?.unit_price || 0,
+        unit_name: cacheItem?.unit_name || 'รายการ',
+        asset_id: mainSelect.value,
+        name_id: mainOpt?.dataset.nameid || '01',
+        subcategories_code: subcatCode // 🎯 รหัสหมวดหมู่ย่อยที่ผู้ใช้เลือก
+      });
+    }
+  });
+
+  if (missingCategory) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'ข้อมูลไม่ครบถ้วน',
+      text: 'กรุณาเลือกทั้ง "หมวดหมู่หลัก" และ "หมวดหมู่ย่อย" ให้ครบถ้วนทุกรายการที่เลือก',
+      confirmButtonColor: '#0f172a'
+    });
+    return;
+  }
+
   const fundType = document.getElementById("parcelFundType")?.value || "งบประมาณ";
   const yearBE = document.getElementById("parcelYearBE")?.value || "2569";
 
   const confirmRes = await Swal.fire({
     title: 'ยืนยันการออกเลขพัสดุ',
-    text: `ต้องการออกเลขพัสดุจำนวน ${uids.length} รายการ (ประเภท: ${fundType}, ปี: ${yearBE}) ใช่หรือไม่?`,
+    text: `ต้องการออกเลขพัสดุจำนวน ${selectedItems.length} รายการ ใช่หรือไม่?`,
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#198754',
@@ -463,7 +749,7 @@ export async function confirmGenerateParcelIDs() {
     didOpen: () => Swal.showLoading()
   });
 
-  const res = await generateParcelNumbersBackend(uids, fundType, yearBE);
+  const res = await generateParcelNumbersBackend(selectedItems, fundType, yearBE);
 
   if (res.success) {
     Swal.fire({
@@ -567,10 +853,217 @@ export function resetFormToMain() {
   window.location.href = "index.html";
 }
 
+export async function updateAllParcelPreviews() {
+  const rows = Array.from(document.querySelectorAll('.parcel-asset-select:not([disabled])'));
+  if (rows.length === 0) return;
+
+  const yearBE = document.getElementById("parcelYearBE")?.value || "2569";
+  const year2Digits = String(yearBE).slice(-2);
+  
+  // 1. เก็บค่าตั้งต้นจาก Firestore แยกตามหมวดหมู่
+  const baseCounterMap = {};
+
+  // แสดง Spinner สถานะชั่วคราวขณะคำนวณ
+  rows.forEach(mainSelect => {
+    const uid = mainSelect.dataset.uid;
+    const displayTd = document.querySelector(`.parcel-no-display[data-uid="${uid}"]`);
+    const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+    if (displayTd && mainSelect.value && subcatSelect?.value) {
+      displayTd.innerHTML = `<span class="spinner-border spinner-border-sm text-secondary" role="status"></span>`;
+    }
+  });
+
+  // 2. ดึงค่า Counter ตั้งต้นจาก Firestore (ดึงครั้งเดียวต่อหมวดหมู่)
+  for (const mainSelect of rows) {
+    const uid = mainSelect.dataset.uid;
+    const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+    if (!subcatSelect) continue;
+
+    const mainOpt = mainSelect.options[mainSelect.selectedIndex];
+    const nameId = mainOpt?.dataset.nameid || "";
+    const subcatCode = subcatSelect.value;
+
+    if (!nameId || !subcatCode) continue;
+
+    const counterKey = `${nameId}_${subcatCode}_${year2Digits}`;
+    if (baseCounterMap[counterKey] === undefined) {
+      try {
+        const counterRef = doc(db, "asset_counters", counterKey);
+        const counterSnap = await getDoc(counterRef);
+        baseCounterMap[counterKey] = counterSnap.exists() ? (Number(counterSnap.data().seq) || 0) : 0;
+      } catch (e) {
+        baseCounterMap[counterKey] = 0;
+      }
+    }
+  }
+
+  // 3. วนลูปเรียงแถวจากบนลงล่าง แล้วรันเลขสะสมต่อกัน (+1 ไปเรื่อยๆ สำหรับหมวดซ้ำ)
+  for (const mainSelect of rows) {
+    const uid = mainSelect.dataset.uid;
+    const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+    const displayTd = document.querySelector(`.parcel-no-display[data-uid="${uid}"]`);
+
+    if (!subcatSelect || !displayTd) continue;
+
+    const mainOpt = mainSelect.options[mainSelect.selectedIndex];
+    const nameId = mainOpt?.dataset.nameid || "";
+    const subcatCode = subcatSelect.value;
+
+    if (!nameId || !subcatCode) {
+      displayTd.innerHTML = `-`;
+      continue;
+    }
+
+    const counterKey = `${nameId}_${subcatCode}_${year2Digits}`;
+    
+    // บวกเพิ่มทีละ 1 สำหรับทุกรายการที่เจอกลุ่มหมวดหมู่เดียวกัน
+    baseCounterMap[counterKey]++;
+    
+    const seqFormatted = String(baseCounterMap[counterKey]).padStart(2, '0');
+    const previewNo = `กภกบ.${nameId}-${subcatCode}-${seqFormatted}/${year2Digits}`;
+
+    displayTd.innerHTML = `
+      <div class="text-warning-emphasis fw-bold">
+        ${previewNo}
+        <br><small class="text-muted fw-normal" style="font-size: 0.75rem;">(เลขที่จะได้รับ)</small>
+      </div>
+    `;
+  }
+}
+
+export function previewParcelNumber(uid) {
+  updateAllParcelPreviews();
+}
+
+// 🎯 เติมตัวเลือกหมวดหมู่หลักในส่วนหัวตาราง (Header Dropdown)
+export function populateHeaderAssetDropdown() {
+  const headerMain = document.getElementById("headerMainAsset");
+  if (!headerMain) return;
+
+  const options = assetCategoriesCache.map(cat => {
+    return `<option value="${cat.id}" data-nameid="${cat.name_id}">${cat.name} (${cat.name_id})</option>`;
+  }).join('');
+
+  headerMain.innerHTML = `<option value="">-- เปลี่ยนหมวดหมู่หลักทั้งหมด --</option>` + options;
+}
+
+// 🎯 ฟังก์ชันเมื่อเปลี่ยนหมวดหมู่หลักที่ส่วนหัวตาราง -> ปรับหมวดหมู่หลักของทุกแถวทันที
+export async function onHeaderMainAssetChange(headerSelect) {
+  const assetId = headerSelect.value;
+  const headerSubSelect = document.getElementById("headerSubcatAsset");
+  const loadingStatus = document.getElementById("headerAssetLoadingStatus");
+
+  if (!assetId) return;
+
+  // 1. แสดงสถานะกำลังเปลี่ยน และล็อก UI ป้องกันการกดซ้ำ
+  headerSelect.disabled = true;
+  if (headerSubSelect) headerSubSelect.disabled = true;
+  if (loadingStatus) loadingStatus.classList.remove("d-none");
+
+  // หน่วงเวลาเล็กน้อยเพื่อให้เบราว์เซอร์วาดหน้าจอ "กำลังเปลี่ยน..." ทันที
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  try {
+    // 2. อัปเดตตัวเลือกหมวดหมู่ย่อยส่วนหัว
+    if (headerSubSelect) {
+      const selectedAsset = assetCategoriesCache.find(a => a.id === assetId);
+      const subList = selectedAsset ? selectedAsset.subcategories : [];
+
+      if (subList.length > 0) {
+        const options = subList.map(sub => {
+          const subCode = sub.code || sub.subcategories_code || "01";
+          const subName = sub.name || sub.subcategories_name || subCode;
+          return `<option value="${subCode}">${subName} (${subCode})</option>`;
+        }).join('');
+        headerSubSelect.innerHTML = `<option value="">-- เปลี่ยนหมวดหมู่ย่อยทั้งหมด --</option>` + options;
+      } else {
+        headerSubSelect.innerHTML = `<option value="01">ทั่วไป (01)</option>`;
+      }
+      headerSubSelect.disabled = false;
+    }
+
+    // 3. อัปเดต Dropdown ของทุกแถวในตารางพร้อมกัน
+    const rowMainSelects = Array.from(document.querySelectorAll('.parcel-asset-select:not([disabled])'));
+    for (const selectElem of rowMainSelects) {
+      selectElem.value = assetId;
+      const uid = selectElem.dataset.uid;
+      if (uid) {
+        updateRowSubcatOptionsOnly(selectElem, uid);
+      }
+    }
+  } finally {
+    // 4. ปลดล็อก UI เมื่อประมวลผลเสร็จสิ้น
+    headerSelect.disabled = false;
+    if (loadingStatus) loadingStatus.classList.add("d-none");
+  }
+}
+
+function updateRowSubcatOptionsOnly(mainSelectElem, uid) {
+  const assetId = mainSelectElem.value;
+  const subcatSelect = document.querySelector(`.parcel-subcat-select[data-uid="${uid}"]`);
+  if (!subcatSelect) return;
+
+  if (!assetId) {
+    subcatSelect.innerHTML = `<option value="">-- เลือกหมวดหมู่ย่อย --</option>`;
+    subcatSelect.disabled = true;
+    return;
+  }
+
+  const selectedAsset = assetCategoriesCache.find(a => a.id === assetId);
+  const subList = selectedAsset ? selectedAsset.subcategories : [];
+
+  if (subList.length > 0) {
+    const options = subList.map(sub => {
+      const subCode = sub.code || sub.subcategories_code || "01";
+      const subName = sub.name || sub.subcategories_name || subCode;
+      return `<option value="${subCode}">${subName} (${subCode})</option>`;
+    }).join('');
+    subcatSelect.innerHTML = `<option value="">-- เลือกหมวดหมู่ย่อย --</option>` + options;
+    subcatSelect.disabled = false;
+  } else {
+    subcatSelect.innerHTML = `<option value="01">ทั่วไป (01)</option>`;
+    subcatSelect.disabled = false;
+  }
+}
+
+// 🎯 ฟังก์ชันเมื่อเปลี่ยนหมวดหมู่ย่อยที่ส่วนหัวตาราง -> ปรับหมวดหมู่ย่อยของทุกแถวทันที
+export async function onHeaderSubcatAssetChange(headerSubSelect) {
+  const subcatCode = headerSubSelect.value;
+  const headerMainSelect = document.getElementById("headerMainAsset");
+  const loadingStatus = document.getElementById("headerAssetLoadingStatus");
+
+  if (!subcatCode) return;
+
+  if (headerMainSelect) headerMainSelect.disabled = true;
+  headerSubSelect.disabled = true;
+  if (loadingStatus) loadingStatus.classList.remove("d-none");
+
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  try {
+    const rowSubSelects = Array.from(document.querySelectorAll('.parcel-subcat-select:not([disabled])'));
+    for (const subSelect of rowSubSelects) {
+      subSelect.value = subcatCode;
+    }
+
+    // เรียกประมวลผลคำนวณเลขแบบ Batch รวดเร็ว
+    await previewAllParcelNumbersBatch();
+  } finally {
+    if (headerMainSelect) headerMainSelect.disabled = false;
+    headerSubSelect.disabled = false;
+    if (loadingStatus) loadingStatus.classList.add("d-none");
+  }
+}
+
+export async function previewAllParcelNumbersBatch() {
+  await updateAllParcelPreviews();
+}
+
 // ============================================================================
 // 🚀 AUTO-LOAD ON DOM READY
 // ============================================================================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadAssetCategories();
   loadFundTypesToDropdown();
   loadParcelDataFromLogPay();
 });
@@ -592,3 +1085,8 @@ window.syncRecipientInput = syncRecipientInput;
 window.executeIssueParcels = executeIssueParcels;
 window.resetFormToMain = resetFormToMain;
 window.loadFundTypesToDropdown = loadFundTypesToDropdown;
+window.previewParcelNumber = previewParcelNumber;
+window.onMainAssetChange = onMainAssetChange;
+window.onHeaderMainAssetChange = onHeaderMainAssetChange;
+window.onHeaderSubcatAssetChange = onHeaderSubcatAssetChange;
+window.updateAllParcelPreviews = updateAllParcelPreviews;
