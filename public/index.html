@@ -64,7 +64,7 @@
   </div>
 
   <div class="row g-3 text-center justify-content-center">
-    <!-- เมนูที่ 1: จัดทำเอกสารจัดซื้อจัดจ้าง -->
+
     <div class="col-md-6 col-lg-3 menu-item" data-role="all">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbsPay')">
         <div class="icon-box fs-1 text-primary mb-2"><i class="bi bi-file-earmark-text-fill"></i></div>
@@ -73,7 +73,6 @@
       </div>
     </div>
 
-    <!-- เมนูที่ 2: งานแผนโครงการ -->
     <div class="col-md-6 col-lg-3 menu-item" data-role="admin,officer">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbsbudget')">
         <div class="icon-box fs-1 text-success mb-2"><i class="bi bi-pie-chart-fill"></i></div>
@@ -82,7 +81,6 @@
       </div>
     </div>
 
-    <!-- เมนูที่ 3: ตัดแผน -->
     <div class="col-md-6 col-lg-3 menu-item" data-role="all">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbsbudgetuse')">
         <div class="icon-box fs-1 text-warning mb-2"><i class="bi bi-calculator-fill"></i></div>
@@ -91,7 +89,6 @@
       </div>
     </div>
 
-    <!-- เมนูที่ 4: เลขที่ใบสั่งซื้อสั่งจ้าง -->
     <div class="col-md-6 col-lg-3 menu-item" data-role="admin,officer">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbslogno')">
         <div class="icon-box fs-1 text-info mb-2"><i class="bi bi-card-heading"></i></div>
@@ -100,7 +97,6 @@
       </div>
     </div>
 
-    <!-- เมนูที่ 5: การบริหารพัสดุ -->
     <div class="col-md-6 col-lg-3 menu-item" data-role="admin">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbsparcelmanage')">
         <div class="icon-box fs-1 text-danger mb-2"><i class="bi bi-boxes"></i></div>
@@ -109,7 +105,6 @@
       </div>
     </div>
 
-        <!-- เมนูที่ 6: จัดการสิทธิ์ผู้ใช้งาน (แสดงเฉพาะ admin) -->
     <div class="col-md-6 col-lg-3 menu-item" data-role="admin">
       <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('kbsUserManage')">
         <div class="icon-box fs-1 text-purple mb-2" style="color: #6f42c1;"><i class="bi bi-people-fill"></i></div>
@@ -117,6 +112,15 @@
         <p class="small text-muted mb-0">ปรับเปลี่ยน Role และสิทธิ์การเข้าถึงระบบ</p>
       </div>
     </div>
+
+    <div class="col-md-6 col-lg-3 menu-item" data-role="admin">
+      <div class="card menu-card h-100 shadow-sm border-0 p-3" onclick="showForm('asset-manage')">
+        <div class="icon-box fs-1 text-purple mb-2" style="color: #ffc107;"><i class="bi bi-folder-fill"></i></div>
+        <h5>จัดการหมวดหมู่พัสดุ ครุภัณฑ์</h5>
+        <p class="small text-muted mb-0">จัดการหมวดหมู่พัสดุ ครุภัณฑ์</p>
+      </div>
+    </div>
+
 
   </div>
 </div>

@@ -145,6 +145,53 @@ async function handleLogout() {
     }
 }
 
+/**
+ * 🔒 ตรวจสอบสิทธิ์และซ่อน/แสดงปุ่มเมนูใน main.html
+ * @param {Object} userData ข้อมูลผู้ใช้งานที่ล็อกอิน ดึงมาจาก Firestore `users/{uid}`
+ */
+export function applyUserPermissions(userData) {
+  if (!userData) return;
+
+  const userRole = (userData.role || 'staff').toLowerCase();
+  const userPermissions = Array.isArray(userData.permissions) ? userData.permissions : [];
+
+  // ค้นหาทุกเมนูที่มีคลาส .menu-item
+  const menuItems = document.querySelectorAll('.menu-item');
+
+  menuItems.forEach(item => {
+    const rolesAllowed = (item.getAttribute('data-role') || '').toLowerCase().split(',');
+    
+    // ดึง formId จากคุณลักษณะ onclick (เช่น showForm('kbsPay') -> kbsPay)
+    const onclickAttr = item.getAttribute('onclick') || '';
+    const match = onclickAttr.match(/showForm\(['"]([^'"]+)['"]\)/);
+    const formId = match ? match[1] : '';
+
+    let canAccess = false;
+
+    // 1. ถ้าเป็น Admin ให้เข้าถึงได้ทุกเมนู
+    if (userRole === 'admin') {
+      canAccess = true;
+    } 
+    // 2. ถ้ามีการระบุ permissions เฉพาะเมนูไว้ ให้ยึดตามสิทธิ์เฉพาะรายบุคคลก่อน
+    else if (userPermissions.length > 0 && formId) {
+      canAccess = userPermissions.includes(formId);
+    } 
+    // 3. ถ้าไม่มีการตั้งค่าสิทธิ์เฉพาะ ให้ยึดตามสิทธิ์ data-role พื้นฐานใน HTML
+    else {
+      if (rolesAllowed.includes('all') || rolesAllowed.includes(userRole)) {
+        canAccess = true;
+      }
+    }
+
+    // ซ่อน หรือ แสดง ปุ่มเมนู
+    if (canAccess) {
+      item.style.display = '';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+}
+
 // ==========================================
 // 3. ฟังก์ชันสลับหน้า (Dashboard <-> Form)
 // ==========================================
