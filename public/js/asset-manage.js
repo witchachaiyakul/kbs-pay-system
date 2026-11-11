@@ -398,6 +398,11 @@ export async function saveSubcategoriesToFirestore() {
     }
 }
 
+export function resetFormToMain() {
+  window.location.href = "index.html";
+}
+
+
 // ============================================================================
 // 🚀 AUTO-LOAD ON DOM READY
 // ============================================================================
