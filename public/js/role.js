@@ -18,6 +18,13 @@ const ALL_MENUS = [
   { id: 'asset-manage', name: 'จัดการหมวดหมู่พัสดุ ครุภัณฑ์', icon: 'bi-folder-fill' }
 ];
 
+// 🎯 ค่าเริ่มต้น (Default) ของแต่ละ Role เมื่อแอดมินกดเปลี่ยนใน Dropdown
+const DEFAULT_PAY_PERMISSIONS = {
+  admin: ALL_MENUS.map(m => m.id), // เลือกทุกหน้าอัตโนมัติ
+  staff: ['kbsPay', 'kbsbudget'],  // ค่าเริ่มต้นของ Staff (สะกด kbsPay ให้ตรงกับ ID เมนู)[cite: 1]
+  officer: ['kbsPay', 'kbsbudget', 'kbsbudgetuse', 'kbslogno'] // ค่าพื้นฐานของ Officer ก่อนเลือกเพิ่มตามมอบหมาย[cite: 1]
+};
+
 let usersCache = [];
 let activeEditingUid = null;
 let activeEditingPermissions = [];
@@ -46,12 +53,24 @@ export async function loadUsersTable() {
         usersSnap.forEach((docSnap) => {
             const data = docSnap.data();
             const id = docSnap.id;
+            const role = (data.role || "staff").toLowerCase();
+
+            // อ่านจาก pay_permission ก่อน หากไม่มีให้ดึงจาก permissions เดิมมาแสดง[cite: 1]
+            let savedPayPerms = Array.isArray(data.pay_permission)
+                ? data.pay_permission
+                : (Array.isArray(data.permissions) ? data.permissions : []);
+
+            // หากเป็น admin ให้แสดงครบทุกเมนู[cite: 1]
+            if (role === 'admin' && savedPayPerms.length === 0) {
+                savedPayPerms = [...DEFAULT_PAY_PERMISSIONS.admin];
+            }
+
             existingUsers.push({
                 id: id,
                 name: data.name || "ไม่ระบุชื่อ",
                 pos: data.pos || data.position || "-",
-                role: (data.role || "staff").toLowerCase(),
-                permissions: Array.isArray(data.permissions) ? data.permissions : [],
+                role: role,
+                pay_permission: savedPayPerms,
                 committee_id: data.committee_id || id,
                 line_user_id: data.line_user_id || "",
                 isAssigned: true
@@ -71,12 +90,14 @@ export async function loadUsersTable() {
             const cId = docSnap.id;
 
             if (!assignedCommitteeIds.has(cId)) {
+                const defaultRole = (cData.role || "staff").toLowerCase();
                 pendingCommittees.push({
                     id: cId,
                     name: cData.name || cData.comm_name || "ไม่ระบุชื่อ",
                     pos: cData.pos || cData.position || cData.comm_pos || "-",
-                    role: (cData.role || "staff").toLowerCase(),
-                    permissions: [],
+                    role: defaultRole,
+                    // คนที่ยังไม่เคยกำหนดสิทธิ์ ให้ใส่ค่าเริ่มต้นตาม Role นั้นทันที[cite: 1]
+                    pay_permission: [...(DEFAULT_PAY_PERMISSIONS[defaultRole] || DEFAULT_PAY_PERMISSIONS.staff)],
                     committee_id: cId,
                     line_user_id: cData.line_user_id || "",
                     isAssigned: false
@@ -98,7 +119,7 @@ export async function loadUsersTable() {
             const uid = user.id;
             const currentRole = user.role;
             const isAssigned = user.isAssigned;
-            const userPerms = user.permissions;
+            const userPerms = user.pay_permission;
 
             html += `
                 <tr>
@@ -119,7 +140,7 @@ export async function loadUsersTable() {
                         <button type="button" class="btn btn-outline-secondary btn-sm fw-bold px-2" id="btn_perm_${uid}" 
                                 onclick="openPermissionsModal('${uid}')" ${currentRole === 'admin' ? 'disabled' : ''}>
                             <i class="bi bi-sliders me-1"></i> 
-                            <span id="perm_badge_${uid}">${currentRole === 'admin' ? 'ทุกเมนู' : (userPerms.length > 0 ? `${userPerms.length} เมนู` : 'ตั้งค่าสิทธิ์')}</span>
+                            <span id="perm_badge_${uid}">${currentRole === 'admin' ? `ทุกเมนู (${ALL_MENUS.length})` : (userPerms.length > 0 ? `${userPerms.length} เมนู` : 'ตั้งค่าสิทธิ์')}</span>
                         </button>
                     </td>
                     <td>
@@ -151,7 +172,7 @@ export async function loadUsersTable() {
 }
 
 /**
- * ⚙️ เมื่อเปลี่ยน Role ใน Dropdown
+ * ⚙️ เมื่อเปลี่ยน Role ใน Dropdown -> ตั้งค่าเมนูเริ่มต้น (Default) ตาม Role อัตโนมัติ
  */
 export function handleRoleChange(uid) {
     const selectElem = document.getElementById(`role_select_${uid}`);
@@ -159,14 +180,24 @@ export function handleRoleChange(uid) {
     const badgeSpan = document.getElementById(`perm_badge_${uid}`);
     if (!selectElem || !btnPerm) return;
 
-    if (selectElem.value === 'admin') {
+    const selectedRole = selectElem.value.toLowerCase();
+    const user = usersCache.find(u => u.id === uid);
+
+    // กำหนดค่าเริ่มต้นลงใน Cache ทันทีที่เปลี่ยน Role[cite: 1]
+    const defaultPerms = [...(DEFAULT_PAY_PERMISSIONS[selectedRole] || [])];
+    if (user) {
+        user.role = selectedRole;
+        user.pay_permission = defaultPerms;
+    }
+
+    if (selectedRole === 'admin') {
         btnPerm.disabled = true;
-        if (badgeSpan) badgeSpan.innerText = 'ทุกเมนู';
+        if (badgeSpan) badgeSpan.innerText = `ทุกเมนู (${ALL_MENUS.length})`;
     } else {
         btnPerm.disabled = false;
-        const user = usersCache.find(u => u.id === uid);
-        const permCount = user && Array.isArray(user.permissions) ? user.permissions.length : 0;
-        if (badgeSpan) badgeSpan.innerText = permCount > 0 ? `${permCount} เมนู` : 'ตั้งค่าสิทธิ์';
+        if (badgeSpan) {
+            badgeSpan.innerText = defaultPerms.length > 0 ? `${defaultPerms.length} เมนู` : 'ตั้งค่าสิทธิ์';
+        }
     }
 }
 
@@ -178,7 +209,7 @@ export function openPermissionsModal(uid) {
     if (!user) return;
 
     activeEditingUid = uid;
-    activeEditingPermissions = [...(user.permissions || [])];
+    activeEditingPermissions = [...(user.pay_permission || [])];
 
     const labelName = document.getElementById('permUserName');
     if (labelName) labelName.innerText = `ผู้ใช้งาน: ${user.name} (${user.pos})`;
@@ -226,7 +257,7 @@ export function savePermissionsFromModal() {
     // อัปเดตใน Cache ความจำชั่วคราว
     const user = usersCache.find(u => u.id === activeEditingUid);
     if (user) {
-        user.permissions = selectedPerms;
+        user.pay_permission = selectedPerms;
     }
 
     const badgeSpan = document.getElementById(`perm_badge_${activeEditingUid}`);
@@ -242,18 +273,21 @@ export function savePermissionsFromModal() {
 }
 
 /**
- * 💾 บันทึกสิทธิ์ทั้งหมดลงใน Firestore `users`
+ * 💾 บันทึกสิทธิ์ทั้งหมดลงใน Firestore `users` และ `committees`
  */
 export async function updateUserRole(uid, name, pos, committeeId, lineUserId) {
     const selectElem = document.getElementById(`role_select_${uid}`);
     const btnSave = document.getElementById(`btn_save_${uid}`);
     if (!selectElem) return;
 
-    const newRole = selectElem.value;
+    const newRole = selectElem.value.toLowerCase();
     const user = usersCache.find(u => u.id === uid);
+    const targetDocId = committeeId || uid;
     
-    // ถ้าเป็น admin ให้ล้าง permissions เป็นค่าว่าง (เพราะได้ทุกสิทธิ์อัตโนมัติ)
-    const finalPermissions = newRole === 'admin' ? [] : (user?.permissions || []);
+    // ถ้าเป็น admin ให้บันทึกทุกเมนูอัตโนมัติ[cite: 1]
+    const finalPayPermissions = newRole === 'admin'
+        ? [...DEFAULT_PAY_PERMISSIONS.admin]
+        : (user?.pay_permission || []);
 
     if (btnSave) {
         btnSave.disabled = true;
@@ -261,24 +295,31 @@ export async function updateUserRole(uid, name, pos, committeeId, lineUserId) {
     }
 
     try {
-        const userRef = doc(db, "users", uid);
-        await setDoc(userRef, {
+        // 1. บันทึกลงคอลเลกชัน 'users' ใช้ชื่อฟิลด์ pay_permission[cite: 1]
+        await setDoc(doc(db, "users", targetDocId), {
             name: name,
             pos: pos,
-            committee_id: committeeId || uid,
+            committee_id: targetDocId,
             role: newRole,
-            permissions: finalPermissions,
+            pay_permission: finalPayPermissions,
             line_user_id: lineUserId || "",
+            updated_at: new Date().toISOString()
+        }, { merge: true });
+
+        // 2. อัปเดตกลับไปที่คอลเลกชัน 'committees' เพื่อให้พอร์ทัลหลักเห็นตรงกัน[cite: 1]
+        await setDoc(doc(db, "committees", targetDocId), {
+            role: newRole,
+            pay_permission: finalPayPermissions,
             updated_at: new Date().toISOString()
         }, { merge: true });
 
         Swal.fire({
             icon: 'success',
             title: 'บันทึกสิทธิ์สำเร็จ',
-            text: `บันทึกสิทธิ์ให้คุณ "${name}" เรียบร้อยแล้ว`,
+            text: `อัปเดตสิทธิ์ของ "${name}" เรียบร้อยแล้ว`,
             confirmButtonColor: '#0f172a',
-            timer: 2000,
-            timerProgressBar: true
+            timer: 1800,
+            showConfirmButton: false
         });
 
         await loadUsersTable();
