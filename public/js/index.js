@@ -1,20 +1,12 @@
 // public/js/index.js
+import "./auth-guard.js";
 import { insertAuditLog } from "./firestore.js";
 
 // ==========================================
-// ⚙️ CONFIGURATION & MOCK DATA (DEV MODE)
+// ⚙️ CONFIGURATION
 // ==========================================
-const IS_DEV_MODE = true; // 🎯 เปลี่ยนเป็น false เมื่อนำไปใช้งานจริง
-
-// ข้อมูลจำลองสำหรับทดสอบระบบใน DEV MODE
-const DEV_MOCK_USER = {
-    id: "DEV_USER_001",
-    name: "นายนักพัฒนา ทดสอบระบบ",
-    position: "เจ้าหน้าที่พัสดุ / นักจัดการงานทั่วไป",
-    picture: "https://cdn-icons-png.flaticon.com/512/149/149071.png",
-    role: "admin", // ตัวเลือก: 'admin', 'officer', 'staff'
-    status: "done"
-};
+const IS_DEV_MODE = false; // 🎯 ตั้งเป็น false เสมอ (เพราะ auth-guard.js จัดการ DEV MODE ให้แล้ว)
+const MAIN_PORTAL_URL = "https://kbs-gm.web.app/";
 
 let currentUser = null;
 
@@ -22,52 +14,10 @@ let currentUser = null;
 // 🛡️ AUTH GUARD & INITIALIZATION
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
-    
-    // --------------------------------------------------
-    // 🔓 กรณี 1: เปิดใช้งาน DEV MODE (ข้ามการตรวจสอบ Login/LINE)
-    // --------------------------------------------------
-    if (IS_DEV_MODE) {
-        console.warn("⚠️ ระบบกำลังทำงานใน [DEV MODE]");
-        
-        // แสดง Badge และ Dropdown สลับ Role
-        document.getElementById("devModeBadge")?.classList.remove("d-none");
-        document.getElementById("devRoleSelector")?.classList.remove("d-none");
-
-        // ดึงจาก Session หรือใช้ Mock Data เริ่มต้น
-        const savedDevUser = sessionStorage.getItem("kbs_user");
-        currentUser = savedDevUser ? JSON.parse(savedDevUser) : DEV_MOCK_USER;
-        
-        // บันทึก Session จำลองไว้
-        sessionStorage.setItem("kbs_user", JSON.stringify(currentUser));
-
-        // แสดงผล UI และตั้งค่าสิทธิ์
-        initUserProfile(currentUser);
-        applyRolePermissions(currentUser.role);
-
-        // ผูก Event สลับ Role สำหรับทดสอบสดบนหน้าจอ
-        const selectDevRole = document.getElementById("selectDevRole");
-        if (selectDevRole) {
-            selectDevRole.value = currentUser.role || "admin";
-            selectDevRole.addEventListener("change", (e) => {
-                currentUser.role = e.target.value;
-                sessionStorage.setItem("kbs_user", JSON.stringify(currentUser));
-                initUserProfile(currentUser);
-                applyRolePermissions(currentUser.role);
-            });
-        }
-
-        bindLogoutBtn();
-        return;
-    }
-
-    // --------------------------------------------------
-    // 🔒 กรณี 2: ใช้งานจริง (ต้องมี Session จาก Login)
-    // --------------------------------------------------
     const userSessionStr = sessionStorage.getItem("kbs_user");
 
     if (!userSessionStr) {
-        // หากไม่มี Session ให้กลับไปหน้า login.html
-        window.location.href = "login.html";
+        window.location.href = `${MAIN_PORTAL_URL}?redirect=${encodeURIComponent(window.location.href)}`;
         return;
     }
 
@@ -78,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
         console.error("❌ อ่านข้อมูลผู้ใช้งานล้มเหลว:", e);
         sessionStorage.removeItem("kbs_user");
-        window.location.href = "login.html";
+        window.location.href = MAIN_PORTAL_URL;
         return;
     }
 
@@ -141,7 +91,8 @@ async function handleLogout() {
             await insertAuditLog("LOGOUT", `ออกจากระบบสำเร็จ`, currentUser);
         }
         sessionStorage.removeItem("kbs_user");
-        window.location.href = "login.html";
+        localStorage.removeItem("kbs_user_session"); // 👈 เพิ่มบรรทัดนี้
+        window.location.href = MAIN_PORTAL_URL;
     }
 }
 
