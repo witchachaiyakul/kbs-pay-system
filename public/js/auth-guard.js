@@ -143,3 +143,68 @@ if (IS_DEV_MODE) {
     }
   }
 }
+
+// ============================================================================
+// 🎨 4. อัปเดต Navbar (ชื่อ, ตำแหน่ง, Role, รูปโปรไฟล์) และปุ่มออกจากระบบให้ทุกหน้า
+// ============================================================================
+function renderGlobalNavbar() {
+  const userStr = sessionStorage.getItem(SESSION_KEY);
+  if (!userStr) return;
+
+  try {
+    const user = JSON.parse(userStr);
+
+    // 1. อัปเดตข้อมูลบน Navbar
+    const nameElem = document.getElementById("headerUserName");
+    const posElem = document.getElementById("headerUserPosition");
+    const roleElem = document.getElementById("headerUserRole");
+    const imgElem = document.getElementById("headerUserImg");
+
+    if (nameElem) nameElem.textContent = user.name || "ผู้ใช้งาน";
+    if (posElem) posElem.textContent = `ตำแหน่ง: ${user.position || user.pos || "บุคลากร"}`;
+    if (roleElem) roleElem.textContent = `Role: ${(user.role || "staff").toUpperCase()}`;
+    if (imgElem && user.picture) imgElem.src = user.picture;
+
+    // 2. ผูกปุ่มออกจากระบบ (รองรับทุกหน้าโดยไม่ต้องเขียนซ้ำ)
+    const btnLogout = document.getElementById("btnLogout");
+    if (btnLogout && !btnLogout.dataset.bound) {
+      btnLogout.dataset.bound = "true";
+      btnLogout.addEventListener("click", () => {
+        if (confirm("คุณต้องการออกจากระบบใช่หรือไม่?")) {
+          sessionStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem("kbs_user_session");
+          window.location.href = MAIN_PORTAL_URL;
+        }
+      });
+    }
+
+    // 3. 🛡️ ป้องกันการพิมพ์ URL เข้าหน้าย่อยที่ไม่มีสิทธิ์โดยตรง
+    const currentRole = (user.role || "staff").toLowerCase();
+    if (currentRole !== "admin" && Array.isArray(user.pay_permission)) {
+      const pageToMenuMap = {
+        "pay.html": "kbsPay",
+        "budget.html": "kbsbudget",
+        "budgetuse.html": "kbsbudgetuse",
+        "log-pay.html": "kbslogno",
+        "parcel.html": "kbsparcelmanage",
+        "role.html": "kbsUserManage",
+        "asset-manage.html": "asset-manage"
+      };
+      const currentFile = window.location.pathname.split("/").pop();
+      const requiredMenuId = pageToMenuMap[currentFile];
+
+      if (requiredMenuId && !user.pay_permission.includes(requiredMenuId)) {
+        alert("⛔ คุณไม่มีสิทธิ์เข้าถึงหน้านี้");
+        window.location.href = "index.html";
+      }
+    }
+  } catch (e) {
+    console.error("❌ renderGlobalNavbar error:", e);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", renderGlobalNavbar);
+} else {
+  renderGlobalNavbar();
+}
