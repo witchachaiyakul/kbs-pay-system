@@ -278,3 +278,68 @@
             .card-section { border: none !important; box-shadow: none !important; }
             .form-control, .form-select { border: none !important; background: transparent !important; }
         }
+
+
+
+        //////////dis-parcel///////////////////
+            .qr-sticker-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .qr-sticker-card {
+      border: 1.5px dashed #64748b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .qr-code-box {
+      flex-shrink: 0;
+      width: 96px;
+      height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr-code-box img, .qr-code-box canvas {
+      width: 96px !important;
+      height: 96px !important;
+    }
+    .qr-info-box {
+      font-size: 12px;
+      line-height: 1.35;
+      color: #0f172a;
+      overflow: hidden;
+    }
+    .qr-parcel-no {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0d233a;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printableQrArea, #printableQrArea * {
+        visibility: visible;
+      }
+      #printableQrArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 5mm;
+      }
+      .qr-sticker-card {
+        border: 1px dashed #333;
+      }
+    }
