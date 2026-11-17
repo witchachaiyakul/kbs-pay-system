@@ -46,6 +46,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof checkSellerValidation === 'function') {
         checkSellerValidation();
     }
+
+    // 🎯 4. ผูก Event Listener ช่องค้นหาร้านค้า -> เติมข้อมูลร้านค้าอัตโนมัติ
+    const sellerSearchInput = document.getElementById('seller_name_search');
+    const sellerNameInput = document.getElementById('seller_name');
+
+    if (sellerSearchInput) {
+        // ซิงก์ชื่อร้านค้าที่พิมพ์ไปใส่ช่อง seller_name ทันที (กรณีพิมพ์ชื่อร้านใหม่เอง)
+        sellerSearchInput.addEventListener('input', () => {
+            if (sellerNameInput) sellerNameInput.value = sellerSearchInput.value.trim();
+        });
+
+        // ดึงข้อมูลที่อยู่/เลขผู้เสียภาษีอัตโนมัติเมื่อเลือกร้านจาก Dropdown หรือพิมพ์เสร็จ
+        sellerSearchInput.addEventListener('change', () => {
+            if (typeof handleSelectSeller === 'function') {
+                handleSelectSeller();
+            }
+        });
+    }
 });
 // ============================================================================
 // 🔍 1. ค้นหาข้อมูลจาก FIRESTORE (log_pay ก่อน -> แล้วค่อย log_budget)
@@ -86,181 +104,57 @@ async function fetchDocFromFirestore(collectionName, id) {
 export async function searchBudgetInfo() {
     const logNoInput = document.getElementById('logNoInput');
     const status = document.getElementById('searchStatus');
-    
+
     if (!logNoInput || !status) return;
 
     const logNo = logNoInput.value.trim();
-    
+
     if (logNo.length === 0) {
         status.innerText = '* กรอกเลขเพื่อดึงข้อมูล';
         return;
     }
-    
+
     if (typeof clearFormExceptLogNo === 'function') {
         clearFormExceptLogNo();
     }
     logNoInput.value = logNo;
-    
+
     status.innerText = '⏳ กำลังค้นหาข้อมูล...';
-    window.currentBudget = null; 
+    window.currentBudget = null;
 
     try {
-        const payData = await fetchDocFromFirestore("log_pay", logNo);
-        const budgetData = await fetchDocFromFirestore("log_budget", logNo);
-
-        let planData = null;
-        const projectId = (budgetData && budgetData.project_id) || (payData && payData.project_id);
-        if (projectId) {
-            planData = await fetchDocFromFirestore("budget_plans", projectId);
-        }
-
-        let res = null;
-
-        if (payData) {
-            const addr = payData.seller_address || {};
-            const fin = payData.financial || {};
-            
-            const rawCommittee = payData.committee || [];
-            const formattedCommittee = Array.isArray(rawCommittee) ? rawCommittee.map(c => ({
-                name: c.name || c.comm_name || '',
-                pos: c.pos || c.position || ''
-            })) : [];
-
-            const rawItems = payData.items || [];
-            const formattedItems = Array.isArray(rawItems) ? rawItems.map(item => ({
-                list: item.equipment || item.list || '',
-                torlist: item.torlist || '',
-                qu: item.qu !== undefined ? item.qu : 0,
-                un: item.un || '',
-                pr: item.pr !== undefined ? item.pr : 0,
-                am: item.am !== undefined ? item.am : 0,
-                pr_type: item.pr_type || 'ซื้อ'
-            })) : [];
-
-            const poNoStr = payData.po_no || '';
-            let poBaseNo = Number(payData.po_base_no || payData.base_no) || 0;
-            let poSubNo = Number(payData.po_sub_no || payData.sub_no) || 0;
-            let poYearBe = Number(payData.po_year_be || payData.year_be) || 0;
-            let docType = payData.doc_type || 'po';
-
-            if ((poBaseNo === 0 || poYearBe === 0) && poNoStr.includes('/')) {
-                const parts = poNoStr.split('/');
-                poBaseNo = Number(parts[0]) || 0;
-                if (parts.length === 3) {
-                    poSubNo = Number(parts[1]) || 1;
-                    poYearBe = Number(parts[2]) || (new Date().getFullYear() + 543);
-                } else if (parts.length === 2) {
-                    poSubNo = 1;
-                    poYearBe = Number(parts[1]) || (new Date().getFullYear() + 543);
-                }
-            }
-
-            res = {
-                success: true,
-                isPaid: true,
-                rowNumber: logNo,
-                data: {
-                    logNo: payData.log_no || payData.LOG_NO || logNo,
-                    division: payData.division || payData.ฝ่าย || (budgetData ? (budgetData.division || budgetData.ฝ่าย) : '') || (planData ? planData.division : '') || '',
-                    project: payData.project || payData.โครงการ || (budgetData ? (budgetData.project || budgetData.โครงการ) : '') || (planData ? planData.project_name : '') || '',
-                    activities: payData.activities || payData.กิจกรรม || (budgetData ? (budgetData.activities || budgetData.กิจกรรม) : '') || (planData ? planData.activity_name : '') || '',
-                    budget_use: fin.total || payData.budget_use || payData.amount || (budgetData ? budgetData.budget_use : '0.00'),
-                    method: payData.method || payData.วิธีการ || (budgetData ? budgetData.method : '') || '',
-                    details: payData.details || payData.รายละเอียด || (budgetData ? budgetData.details : '') || '',
-                    buyer: payData.buyer || '',
-                    pos_buyer: payData.pos_buyer || '',
-                    memo_date: payData.memo_date || '',
-                    ctor_date: payData.ctor_date || '',
-                    tor_rp_date: payData.tor_rp_date || '',
-                    to: payData.to || '',
-                    delivery_days: payData.d_dateline || payData.delivery_days || '7',
-                    seller_name: payData.seller || payData.seller_name || '',
-                    seller2: payData.seller2 || '',
-                    seller3: payData.seller3 || '',
-                    bidder_name: payData.sell_name || payData.bidder_name || '',
-                    tax_id: addr.taxid || payData.tax_id || payData.taxid || '',
-                    tel_no: addr.ad_ph || payData.tel_no || '',
-                    address_no: addr.ad_no || payData.address_no || '',
-                    address_moo: addr.ad_m || payData.address_moo || '',
-                    address_road: addr.ad_rd || payData.address_road || '',
-                    address_subdistrict: addr.ad_tb || payData.address_subdistrict || '',
-                    address_district: addr.ad_mu || payData.address_district || '',
-                    address_province: addr.ad_pr || payData.address_province || '',
-                    zip_code: addr.postid || payData.zip_code || '',
-                    po_no: poNoStr,
-                    po_date: payData.po_date || '',
-                    doc_type: docType,
-                    po_base_no: poBaseNo,
-                    po_sub_no: poSubNo,
-                    po_year_be: poYearBe,
-                    invoice_type: payData.invoice_type || '',
-                    doc_date: payData.invoice_date || payData.doc_date || payData.cr_date || '',
-                    doc_no: payData.invoice_no || payData.doc_no || '',
-                    book_no: payData.invoice_book || payData.book_no || '',
-                    qu_date: payData.qu_date || '',
-                    rc_date: payData.rc_date || '',
-                    announce_date: payData.announce_date || '',
-                    deadline: payData.deadline || '',
-                    vat_type: fin.vat_type || payData.vat_type || 'no_vat',
-                    items: formattedItems,
-                    committee: formattedCommittee
-                }
-            };
-        } 
-        else if (budgetData) {
-            res = {
-                success: true,
-                isPaid: false,
-                rowNumber: logNo,
-                data: {
-                    logNo: budgetData.LOG_NO || budgetData.logNo || budgetData.log_no || logNo,
-                    division: budgetData.division || budgetData.ฝ่าย || (planData ? planData.division : '') || '',
-                    project: budgetData.project || budgetData.โครงการ || (planData ? planData.project_name : '') || '',
-                    activities: budgetData.activities || budgetData.กิจกรรม || (planData ? planData.activity_name : '') || '',
-                    budget_use: budgetData.budget_use || budgetData.request || budgetData.amount || '0.00',
-                    method: budgetData.method || budgetData.วิธีการ || '',
-                    details: budgetData.details || budgetData.รายละเอียด || '',
-                    buyer: '', pos_buyer: '', memo_date: '', ctor_date: '', tor_rp_date: '',
-                    to: '', delivery_days: '7', seller_name: '', seller2: '', seller3: '',
-                    tax_id: '', tel_no: '', address_no: '', address_moo: '', address_road: '',
-                    address_subdistrict: '', address_district: '', address_province: '', zip_code: '',
-                    bidder_name: '', invoice_type: '', doc_date: '', doc_no: '', book_no: '',
-                    po_no: '', po_date: '', doc_type: '', po_base_no: 0, po_sub_no: 0, po_year_be: '',
-                    qu_date: '', rc_date: '', announce_date: '', deadline: '',
-                    vat_type: 'no_vat', items: [], committee: []
-                }
-            };
-        }
+        // 🎯 เรียกใช้ getBudgetInfo(logNo) ที่มีอยู่แล้วในไฟล์ (ใช้ Firebase v10 doc/getDoc โดยตรง)
+        const res = await getBudgetInfo(logNo);
 
         if (res && res.success) {
             window.currentBudget = res.data;
-            
+
             const rowNumInput = document.getElementById('row_number');
             if (rowNumInput) rowNumInput.value = res.rowNumber || 0;
-            
+
             const saveBtn = document.getElementById('saveBtn');
             if (res.isPaid) {
                 status.innerHTML = '<span style="color: #ff9800; font-weight: bold;">⚠️ มีการพิมพ์เบิกจ่ายแล้ว (โปรดตรวจสอบก่อนแก้ไข)</span>';
-                if (saveBtn) saveBtn.innerHTML = "🔄 อัปเดตข้อมูลและสร้าง PDF"; 
+                if (saveBtn) saveBtn.innerHTML = "🔄 อัปเดตข้อมูลและสร้าง PDF";
             } else {
                 status.innerHTML = '<span style="color: #4caf50; font-weight: bold;">✅ ผ่านการตัดแผนแล้ว</span>';
-                if (saveBtn) saveBtn.innerHTML = "💾 บันทึกและสร้าง PDF"; 
-                if (typeof resetSellerFields === 'function') resetSellerFields(false); 
+                if (saveBtn) saveBtn.innerHTML = "💾 บันทึกและสร้าง PDF";
+                if (typeof resetSellerFields === 'function') resetSellerFields(false);
             }
-            
+
             if (document.getElementById('division')) document.getElementById('division').value = res.data.division || '';
             if (document.getElementById('project')) document.getElementById('project').value = res.data.project || '';
             if (document.getElementById('activities')) document.getElementById('activities').value = res.data.activities || '';
-            
+
             const rawBudgetUse = res.data.budget_use;
-            const cleanBudgetUse = String(rawBudgetUse).replace(/,/g, '').trim(); 
+            const cleanBudgetUse = String(rawBudgetUse).replace(/,/g, '').trim();
             if (document.getElementById('quantity')) {
                 document.getElementById('quantity').value = (typeof formatMoney === 'function') ? formatMoney(cleanBudgetUse) : cleanBudgetUse;
             }
-            
+
             if (document.getElementById('method')) document.getElementById('method').value = res.data.method || '';
             if (document.getElementById('details')) document.getElementById('details').value = res.data.details || '';
-            
+
             if (res.isPaid) {
                 if (document.getElementById('buyer')) document.getElementById('buyer').value = res.data.buyer || '';
                 if (document.getElementById('pos_buyer')) document.getElementById('pos_buyer').value = res.data.pos_buyer || '';
@@ -280,7 +174,7 @@ export async function searchBudgetInfo() {
 
                 if (document.getElementById('seller_name_search')) document.getElementById('seller_name_search').value = res.data.seller_name || '';
                 if (document.getElementById('seller_name')) document.getElementById('seller_name').value = res.data.seller_name || '';
-                
+
                 const taxInput = document.getElementById('tax_id') || document.getElementById('taxid');
                 if (taxInput) taxInput.value = res.data.tax_id || res.data.taxid || '';
 
@@ -293,15 +187,14 @@ export async function searchBudgetInfo() {
                 if (document.getElementById('address_province')) document.getElementById('address_province').value = res.data.address_province || '';
                 if (document.getElementById('zip_code')) document.getElementById('zip_code').value = res.data.zip_code || '';
                 if (document.getElementById('bidder_name')) document.getElementById('bidder_name').value = res.data.bidder_name || '';
-                
+
                 if (document.getElementById('seller2')) document.getElementById('seller2').value = res.data.seller2 || '';
                 if (document.getElementById('seller3')) document.getElementById('seller3').value = res.data.seller3 || '';
-                
-                // 🎯 แก้ไขเพิ่ม: เรียกใช้ฟังก์ชันเพื่อเช็กค่า seller2 และ seller3 สั่งซ่อนกล่องเตือนทันทีหลังหยอดข้อมูลสำเร็จ
-                checkSellerValidation();
+
+                if (typeof checkSellerValidation === 'function') checkSellerValidation();
 
                 if (document.getElementById('invoice_type')) document.getElementById('invoice_type').value = res.data.invoice_type || '';
-                
+
                 const dateVal = res.data.doc_date || res.data.invoice_date || res.data.cr_date || '';
                 const docDateElem = document.getElementById('doc_date') || document.getElementById('invoice_date') || document.querySelector('input[name="doc_date"]');
                 if (docDateElem) docDateElem.value = dateVal;
@@ -346,22 +239,22 @@ export async function searchBudgetInfo() {
 
                 setDateField('date_memo',     res.data.memo_date);
                 setDateField('date_ctor',     res.data.ctor_date);
-                setDateField('date_tor_rp',   res.data.tor_rp_date);
-                setDateField('date_req',      res.data.qu_date);
-                setDateField('date_result',   res.data.rc_date);
+                setDateField('date_tor_rp',  res.data.tor_rp_date);
+                setDateField('date_req',     res.data.qu_date);
+                setDateField('date_result',  res.data.rc_date);
                 setDateField('date_announce', res.data.announce_date);
                 setDateField('date_po',       res.data.po_date);
-                
+
                 const deadlineVal = res.data.deadline || res.data.date_delivery || res.data.delivery_date;
                 setDateField('date_delivery', deadlineVal);
                 setDateField('deadline',      deadlineVal);
-                
+
                 const crDateVal = res.data.cr_date || res.data.date_receive || res.data.invoice_date || res.data.doc_date || dateVal;
                 setDateField('date_receive', crDateVal);
                 setDateField('cr_date',      crDateVal);
 
                 if (document.getElementById('po_no')) document.getElementById('po_no').value = res.data.po_no || '';
-                
+
                 if (res.data.vat_type) {
                     const vatRadio = document.querySelector(`input[name="vat_type"][value="${res.data.vat_type}"]`);
                     if (vatRadio) vatRadio.checked = true;
@@ -370,30 +263,35 @@ export async function searchBudgetInfo() {
                     if (defaultVat) defaultVat.checked = true;
                 }
 
+                // สร้างตารางรายการพัสดุพร้อม torlist
                 if (res.data.items && res.data.items.length > 0) {
                     const tbody = document.getElementById('itemListBody');
                     if (tbody) {
                         tbody.innerHTML = '';
                         window.currentRowCount = 0;
-                        
+                        const escapeAttr = (str) => String(str || '').replace(/"/g, '&quot;');
+
                         res.data.items.forEach((item) => {
-                            currentRowCount++;
-                            const i = currentRowCount;
+                            window.currentRowCount++;
+                            const i = window.currentRowCount;
+                            const itemName = escapeAttr(item.list || item.equipment || '');
+                            const unitName = escapeAttr(item.un || '');
+
                             const tr = document.createElement('tr');
                             tr.innerHTML = `
                                 <td class="row-num text-center align-top pt-2">${i}</td>
                                 <td>
-                                    <input type="text" name="list${i}" id="list${i}" class="form-control form-control-sm mb-1" value="${item.list || item.equipment || ''}" placeholder="รายการที่ ${i}" style="width: 100%;">
+                                    <input type="text" name="list${i}" id="list${i}" class="form-control form-control-sm mb-1" value="${itemName}" placeholder="รายการที่ ${i}" style="width: 100%;">
                                     <textarea name="torlist${i}" id="torlist${i}" class="form-control form-control-sm" rows="2" placeholder="รายละเอียดคุณลักษณะเฉพาะ" style="width: 100%; background-color: #ffffff !important; color: #000000 !important; cursor: text;">${item.torlist || ''}</textarea>
                                 </td>
                                 <td class="align-top">
                                     <input type="number" name="qu${i}" id="qu${i}" value="${item.qu !== undefined ? item.qu : ''}" step="0.01" class="form-control form-control-sm qty-input text-center" oninput="calculateTotals()" placeholder="0" style="width: 100%;">
                                 </td>
                                 <td class="align-top">
-                                    <input type="text" name="un${i}" id="un${i}" value="${item.un || ''}" class="form-control form-control-sm text-center" placeholder="หน่วย" list="unit_list" style="width: 100%;">
+                                    <input type="text" name="un${i}" id="un${i}" value="${unitName}" class="form-control form-control-sm text-center" placeholder="หน่วย" list="unit_list" style="width: 100%;">
                                 </td>
                                 <td class="align-top">
-                                    <input type="number" name="pr${i}" id="pr${i}" value="${String(item.pr || 0).replace(/,/g,'')}" step="0.01" class="form-control form-control-sm price-input text-end" oninput="calculateTotals()" placeholder="0.00" style="width: 100%;">
+                                    <input type="number" name="pr${i}" id="pr${i}" value="${String(item.pr || 0).replace(/,/g, '')}" step="0.01" class="form-control form-control-sm price-input text-end" oninput="calculateTotals()" placeholder="0.00" style="width: 100%;">
                                 </td>
                                 <td class="align-top">
                                     <input type="text" name="am${i}" id="am${i}" value="${item.am || '0.00'}" readonly class="form-control form-control-sm text-end fw-bold text-success" style="width: 100%; background-color: #e9ecef !important;">
@@ -413,24 +311,32 @@ export async function searchBudgetInfo() {
 
                 const defaultVatRadio = document.querySelector('input[name="vat_type"][value="no_vat"]');
                 if (defaultVatRadio) defaultVatRadio.checked = true;
+
+                // ล้างตารางแถวเก่าแล้วสร้างแถวเริ่มต้นใหม่ 5 แถว
+                const tbody = document.getElementById('itemListBody');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                    window.currentRowCount = 0;
+                    if (typeof addRowBatch === 'function') addRowBatch();
+                }
             }
 
-            const budgetUseFloat = parseFloat(cleanBudgetUse) || 0; 
+            const budgetUseFloat = parseFloat(cleanBudgetUse) || 0;
             if (typeof updateCommittee === 'function') updateCommittee(budgetUseFloat, res.data);
-            if (typeof calculateTotals === 'function') calculateTotals(); 
-            
+            if (typeof calculateTotals === 'function') calculateTotals();
+
             if (!res.isPaid && typeof updateDateCalculation === 'function') {
-                updateDateCalculation(); 
+                updateDateCalculation();
             } else if (typeof refreshAllDateDisplays === 'function') {
                 refreshAllDateDisplays();
             }
 
-            if (typeof validateBudget === 'function') validateBudget(); 
+            if (typeof validateBudget === 'function') validateBudget();
 
         } else {
             status.innerText = `❌ ไม่พบข้อมูลเลข นผ.2 (${logNo}) ในระบบ`;
             if (typeof resetBudgetFields === 'function') resetBudgetFields();
-            if (typeof updateCommittee === 'function') updateCommittee(0, {}); 
+            if (typeof updateCommittee === 'function') updateCommittee(0, {});
         }
 
     } catch (error) {
@@ -709,7 +615,6 @@ export function autoFillBuyerPos() {
         return;
     }
     
-    // ดึงฐานข้อมูลรายชื่อจากตัวแปร global
     const dbList = window.committeeDatabase || window.allCommittees || [];
     const match = dbList.find(c => {
         const name = (c.name || c.comm_name || c.fullname || '').trim();
@@ -717,7 +622,7 @@ export function autoFillBuyerPos() {
     });
     
     if (match) {
-        posInput.value = match.position || match.pos || '';
+        posInput.value = getPayPosition(match); // 🎯 ใช้ฟังก์ชันตรวจสอบและตัดตำแหน่ง
     }
 }
 
@@ -808,6 +713,56 @@ export async function getCommitteeDb() {
   }
 }
 
+/**
+ * 🏪 ดึงข้อมูลร้านค้าผ่าน getSupplierInfo และเติมลงฟอร์มอัตโนมัติ
+ */
+export async function handleSelectSeller() {
+  const searchInput = document.getElementById('seller_name_search');
+  const sellerNameInput = document.getElementById('seller_name');
+  const statusElem = document.getElementById('seller_search_status');
+  if (!searchInput || !sellerNameInput) return;
+
+  const keyword = searchInput.value.trim();
+  if (!keyword) {
+    sellerNameInput.value = '';
+    return;
+  }
+
+  // นำชื่อที่เลือก/พิมพ์ไปใส่ช่อง seller_name ทันที
+  sellerNameInput.value = keyword;
+  if (statusElem) statusElem.textContent = 'กำลังค้นหาข้อมูลร้านค้า...';
+
+  // เรียกใช้ฟังก์ชัน getSupplierInfo เดิมของคุณ
+  const res = await getSupplierInfo(keyword);
+
+  if (res.success && res.data) {
+    const d = res.data;
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val || '';
+    };
+
+    // เติมข้อมูลลงทุกช่อง (รองรับทั้งชื่อฟิลด์แบบเก่าและแบบใหม่)
+    setVal('tax_id', d.tax_id || d.taxid);
+    setVal('tel_no', d.tel_no || d.ad_ph || d.tel);
+    setVal('address_no', d.address_no || d.ad_no);
+    setVal('address_moo', d.address_moo || d.ad_m);
+    setVal('address_road', d.address_road || d.ad_rd);
+    setVal('address_subdistrict', d.address_subdistrict || d.ad_tb);
+    setVal('address_district', d.address_district || d.ad_mu);
+    setVal('address_province', d.address_province || d.ad_pr);
+    setVal('zip_code', d.zip_code || d.postid);
+    setVal('bidder_name', d.bidder_name || d.bidder);
+    setVal('invoice_type', d.invoice_type);
+
+    if (statusElem) statusElem.textContent = '✅ ดึงข้อมูลร้านค้าเรียบร้อยแล้ว';
+  } else {
+    if (statusElem) statusElem.textContent = 'ไม่พบในฐานข้อมูล (สามารถกรอกข้อมูลด้านล่างเพิ่มเองได้)';
+  }
+}
+
+window.handleSelectSeller = handleSelectSeller;
+
 export async function getSupplierInfo(sellerName) {
   try {
     if (!sellerName) return { success: false, message: 'ไม่ได้ระบุชื่อร้านค้า' };
@@ -854,28 +809,49 @@ export async function loadKbsPayMasterData() {
         window.allHolidays = holidayList;
         if (typeof updateDateCalculation === 'function') updateDateCalculation();
 
-        // 3. ดึงรายชื่อร้านค้าจาก Firestore คอลเลกชัน "sellers"
-        const sellersSnap = await getDocs(collection(db, "sellers"));
-        const sellersList = [];
-        sellersSnap.forEach(docSnap => {
-            const data = docSnap.data();
-            const name = data.seller_name || data.name || data.seller;
-            if (name && name.trim() !== "") sellersList.push(name.trim());
-        });
-        window.allSellersData = sellersList;
+        // 3 & 4. ดึงข้อมูลร้านค้าจาก "suppliers" -> สร้างทั้งรายชื่อร้าน (#seller_list) และประวัติประเภทเอกสาร (#inv_type_list)
+        const suppliersSnap = await getDocs(collection(db, "suppliers"));
+        const suppliersList = [];
+        const invTypeSet = new Set();
 
-        // 4. ดึงประเภทเอกสารใส่ Dropdown (#inv_type_list) จาก Firestore คอลเลกชัน "invoice_types"
-        const invTypeSnap = await getDocs(collection(db, "invoice_types"));
-        const invTypeList = document.getElementById('inv_type_list');
-        if (invTypeList) {
-            invTypeList.innerHTML = "";
-            invTypeSnap.forEach(docSnap => {
-                const typeVal = docSnap.data().type || docSnap.data().name;
-                if (typeVal) {
-                    const option = document.createElement('option');
-                    option.value = typeVal;
-                    invTypeList.appendChild(option);
-                }
+        const sellerListElem = document.getElementById('seller_list');
+        const sellerStatusElem = document.getElementById('seller_search_status');
+        const invTypeListElem = document.getElementById('inv_type_list');
+
+        if (sellerListElem) sellerListElem.innerHTML = "";
+        if (invTypeListElem) invTypeListElem.innerHTML = "";
+
+        suppliersSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            suppliersList.push(data); // เก็บข้อมูลเต็มไว้ใช้งาน
+
+            // 3.1 สร้างตัวเลือกรายชื่อร้านค้าลง #seller_list
+            const name = (data.seller || data.seller_name || data.name || "").trim();
+            if (name && sellerListElem) {
+                const option = document.createElement('option');
+                option.value = name;
+                sellerListElem.appendChild(option);
+            }
+
+            // 4.1 รวบรวมประเภทเอกสารที่เคยบันทึกไว้ในแต่ละร้าน (ตัดคำซ้ำอัตโนมัติ)
+            const invType = (data.invoice_type || "").trim();
+            if (invType) invTypeSet.add(invType);
+        });
+
+        window.allSellersData = suppliersList;
+
+        if (sellerStatusElem) {
+            sellerStatusElem.textContent = suppliersList.length > 0
+                ? `พร้อมค้นหาจากฐานข้อมูลร้านค้า (${suppliersList.length} ร้าน)`
+                : "พิมพ์ชื่อร้านค้าอย่างน้อย 2 ตัวอักษร";
+        }
+
+        // สร้างตัวเลือกช่วยพิมพ์ใน <datalist id="inv_type_list"> (เผื่อพนักงานเลือกจากที่เคยกรอกหรือพิมพ์ใหม่เอง)
+        if (invTypeListElem) {
+            invTypeSet.forEach(val => {
+                const option = document.createElement('option');
+                option.value = val;
+                invTypeListElem.appendChild(option);
             });
         }
 
@@ -899,9 +875,8 @@ export async function loadKbsPayMasterData() {
             if (name) {
                 const option = document.createElement('option');
                 option.value = name;
-            if (c.position || c.pos) {
-                        option.label = c.position || c.pos; 
-                    }
+                const displayPos = getPayPosition(c); // 🎯 แสดงตำแหน่งที่ตัดแล้วใน Dropdown
+                if (displayPos) option.label = `${name} (${displayPos})`;
                 dataList.appendChild(option);
             }
         });
@@ -969,7 +944,7 @@ export function onCommitteeNameChange(elem, index) {
     const dbList = window.committeeDatabase || [];
     const match = dbList.find(c => (c.name || c.comm_name || c.fullname || '').trim() === nameVal);
     if (match) {
-        posInput.value = match.position || match.pos || '';
+        posInput.value = getPayPosition(match); // 🎯 ใช้ฟังก์ชันตรวจสอบและตัดตำแหน่ง
     }
 }
 
@@ -1156,6 +1131,8 @@ export async function saveKbsPayData(payload) {
     } catch (bErr) {
       console.warn("⚠️ ไม่พบเอกสาร log_budget เพื่ออัปเดต:", bErr);
     }
+
+    await upsertSupplierToFirestore(data);
 
     // 3. อัปเดตข้อมูลร้านค้าเข้าคอลเลกชัน 'suppliers'
     const cleanTaxId = (data.taxid || '').trim();
@@ -1597,6 +1574,66 @@ export async function submitForm() {
     };
 
     try {
+        const logNo = document.getElementById('logNoInput')?.value.trim() || '';
+
+        // 🎯 1. ดึงและตรวจสอบรายการพัสดุจากหน้าจอ (ตรวจให้ผ่านก่อนออกเลข PO)
+        const equipmentItems = [];
+        const tableRows = document.querySelectorAll('#itemListBody tr').length;
+        const maxRows = Math.max(
+            typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 0,
+            tableRows,
+            10
+        );
+
+        for (let i = 1; i <= maxRows; i++) {
+            const eqInput = document.getElementById(`list${i}`) || document.getElementsByName(`list${i}`)[0];
+            const eqName = eqInput ? eqInput.value.trim() : "";
+
+            if (eqName !== "") {
+                const torInput = document.getElementById(`torlist${i}`);
+                const torVal = torInput ? torInput.value.trim() : "";
+
+                // ✅ เงื่อนไขที่เพิ่ม: ถ้าระบุชื่อรายการ ต้องระบุรายละเอียดคุณลักษณะเฉพาะด้วย
+                if (torVal === "") {
+                    alert(`⚠️ กรุณาระบุ "รายละเอียดคุณลักษณะเฉพาะ" ของรายการที่ ${i} (${eqName})`);
+                    if (torInput) torInput.focus();
+                    if (saveBtn) {
+                        saveBtn.innerHTML = originalBtnText;
+                        saveBtn.disabled = false;
+                    }
+                    return;
+                }
+
+                const quVal = parseFloat(document.getElementById(`qu${i}`)?.value) || 0;
+                const unVal = document.getElementById(`un${i}`)?.value || document.getElementsByName(`un${i}`)[0]?.value || '';
+                const prVal = parseFloat(document.getElementById(`pr${i}`)?.value) || 0;
+                const rawAm = document.getElementById(`am${i}`)?.value || "0.00";
+                const amVal = parseFloat(String(rawAm).replace(/,/g, '')) || 0;
+
+                equipmentItems.push({
+                    log_no: logNo, 
+                    equipment: eqName,
+                    list: eqName,
+                    torlist: torVal,
+                    qu: quVal,
+                    un: unVal,
+                    pr: prVal,
+                    am: amVal,
+                    sp: amVal 
+                });
+            }
+        }
+
+        // ✅ ป้องกันกรณีลืมกรอกรายการพัสดุเลย
+        if (equipmentItems.length === 0) {
+            alert('⚠️ กรุณาระบุรายการพัสดุ/จัดจ้าง อย่างน้อย 1 รายการ');
+            if (saveBtn) {
+                saveBtn.innerHTML = originalBtnText;
+                saveBtn.disabled = false;
+            }
+            return;
+        }
+
         const prDate = getDateVal('date_req') || 
                        document.getElementById('doc_date')?.value || 
                        new Date().toISOString().split('T')[0];
@@ -1610,8 +1647,7 @@ export async function submitForm() {
             poType = 'fpo';
         }
 
-        // 🎯 ดึงค่าสำคัญที่ต้องใช้ล่วงหน้า (logNo, grandTotal, ฯลฯ) ให้เรียบร้อยก่อนประกอบ Object
-        const logNo = document.getElementById('logNoInput')?.value.trim() || '';
+        // 🎯 ดึงค่าสำคัญที่ต้องใช้ล่วงหน้า (grandTotal, ฯลฯ) ให้เรียบร้อยก่อนประกอบ Object
         const deliveryDaysVal = parseInt(document.getElementById('deliveryDays')?.value, 10) || 7;
         const grandTotal = document.getElementById('cal_grandtotal')?.value || '0.00';
         const exVat = document.getElementById('cal_subtotal')?.value || '0.00';
@@ -1635,41 +1671,6 @@ export async function submitForm() {
             const holidays = window.allHolidays || (typeof getHolidaysFromFirestore === 'function' ? await getHolidaysFromFirestore() : []);
             const poLogs = window.allPoLogs || (typeof getLogPoDataFromFirestore === 'function' ? await getLogPoDataFromFirestore() : []);
             poGenerated = generateLogPoNumber(poType, prDate, poLogs, holidays);
-        }
-
-        // 🎯 1. ดึงรายการพัสดุจากหน้าจอ
-        const equipmentItems = [];
-        const tableRows = document.querySelectorAll('#itemListBody tr').length;
-        const maxRows = Math.max(
-            typeof window.currentRowCount !== 'undefined' ? window.currentRowCount : 0,
-            tableRows,
-            10
-        );
-
-        for (let i = 1; i <= maxRows; i++) {
-            const eqInput = document.getElementById(`list${i}`) || document.getElementsByName(`list${i}`)[0];
-            const eqName = eqInput ? eqInput.value.trim() : "";
-
-            if (eqName !== "") {
-                const quVal = parseFloat(document.getElementById(`qu${i}`)?.value) || 0;
-                const unVal = document.getElementById(`un${i}`)?.value || document.getElementsByName(`un${i}`)[0]?.value || '';
-                const prVal = parseFloat(document.getElementById(`pr${i}`)?.value) || 0;
-                const rawAm = document.getElementById(`am${i}`)?.value || "0.00";
-                const amVal = parseFloat(String(rawAm).replace(/,/g, '')) || 0;
-                const torVal = document.getElementById(`torlist${i}`)?.value.trim() || "";
-
-                equipmentItems.push({
-                    log_no: logNo, 
-                    equipment: eqName,
-                    list: eqName,
-                    torlist: torVal,
-                    qu: quVal,
-                    un: unVal,
-                    pr: prVal,
-                    am: amVal,
-                    sp: amVal 
-                });
-            }
         }
 
         // 🎯 2. ประกอบข้อมูลและบันทึกลง log_po
@@ -2389,7 +2390,7 @@ export function updateCommittee(budget = 0, data = {}) {
         const name3 = hasSavedCommittee ? comm_name3 : "";
         const pos3 = hasSavedCommittee ? comm_pos3 : "";
 
-        html += createMemberRow(1, "ผู้รับผิดชอบ", name1, pos1);
+        html += createMemberRow(1, "ประธานคณะกรรมการ", name1, pos1);
         html += createMemberRow(2, "กรรมการ", name2, pos2);
         html += createMemberRow(3, "กรรมการ", name3, pos3);
     }
@@ -2411,6 +2412,199 @@ export function checkSellerValidation() {
         }
     }
 }
+
+function getPayPosition(person) {
+    if (!person) return '';
+    
+    // 1. ตรวจสอบว่ามี pay_position หรือไม่
+    if (person.pay_position && String(person.pay_position).trim() !== '') {
+        return String(person.pay_position).trim();
+    }
+
+    // 2. ถ้าไม่มี ให้ตัดหลัง / ออก (เช่น "ครู/ศิลปะ(ทัศนศิลป์)" -> "ครู")
+    const rawPos = String(person.pos || person.position || '').trim();
+    return rawPos.split('/')[0].trim();
+}
+
+export async function upsertSupplierToFirestore(data) {
+    // รองรับชื่อตัวแปรทั้งจาก Form HTML (tax_id, seller_name, tel_no, address_*) และจาก DB เดิม (taxid, seller, ad_*)
+    const cleanTaxId = String(data.tax_id || data.taxid || '').trim();
+    const sellerName = String(data.seller_name || data.seller || '').trim();
+
+    // ข้ามการบันทึกหากไม่มีเลขประจำตัวผู้เสียภาษี หรือไม่มีชื่อร้านค้า
+    if (!cleanTaxId || cleanTaxId === '-' || cleanTaxId === '0' || !sellerName) {
+        return;
+    }
+
+    const zipVal = String(data.zip_code || data.postid || '').trim();
+    const supplierPayload = {
+        seller: sellerName,
+        taxid: cleanTaxId,
+        bidder_name: String(data.bidder_name || data.sell_name || '').trim(),
+        invoice_type: String(data.invoice_type || '').trim(),
+        ad_ph: String(data.tel_no || data.ad_ph || '').trim(),
+        ad_no: String(data.address_no || data.ad_no || '').trim(),
+        ad_m: String(data.address_moo || data.ad_m || '').trim(),
+        ad_rd: String(data.address_road || data.ad_rd || '').trim(),
+        ad_tb: String(data.address_subdistrict || data.ad_tb || '').trim(),
+        ad_mu: String(data.address_district || data.ad_mu || '').trim(),
+        ad_pr: String(data.address_province || data.ad_pr || '').trim(),
+        postid: zipVal ? Number(zipVal) || 0 : 0 // เก็บเป็นตัวเลข (number) ตามโครงสร้างเดิม
+    };
+
+    try {
+        const supRef = doc(db, "suppliers", cleanTaxId);
+        const supSnap = await getDoc(supRef);
+
+        if (supSnap.exists()) {
+            // 🔄 กรณีมีข้อมูลเดิมอยู่แล้ว: ตรวจสอบว่ามีฟิลด์ไหนเปลี่ยนแปลงหรือไม่ ถ้ามีจึงสั่ง updateDoc
+            const oldData = supSnap.data();
+            const hasChanged = Object.keys(supplierPayload).some(
+                key => String(oldData[key] ?? '') !== String(supplierPayload[key] ?? '')
+            );
+
+            if (hasChanged) {
+                await updateDoc(supRef, {
+                    ...supplierPayload,
+                    updated_at: new Date().toISOString()
+                });
+                console.log(`🔄 อัปเดตข้อมูลร้านค้า suppliers/${cleanTaxId} เรียบร้อย`);
+            } else {
+                console.log(`ℹ️ ข้อมูลร้านค้า suppliers/${cleanTaxId} ไม่มีการเปลี่ยนแปลง`);
+            }
+        } else {
+            // 🆕 กรณีเพิ่มร้านค้าใหม่: สร้าง Document ใหม่ตั้งชื่อตาม taxid
+            await setDoc(supRef, {
+                ...supplierPayload,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
+            console.log(`✅ สร้างร้านค้าใหม่ suppliers/${cleanTaxId} เรียบร้อย`);
+        }
+    } catch (err) {
+        console.error(`❌ บันทึก/อัปเดตข้อมูลร้านค้า suppliers/${cleanTaxId} ล้มเหลว:`, err);
+    }
+}
+
+const MAX_ROWS = 50;
+window.currentRowCount = window.currentRowCount || 0;
+
+export function addRowBatch() {
+    const tbody = document.getElementById('itemListBody');
+    if (!tbody) return;
+
+    // ซิงก์จำนวนแถวกับตารางจริงบนหน้าจอเสมอ
+    window.currentRowCount = tbody.querySelectorAll('tr').length;
+
+    let rowsToAdd = 5;
+    if (window.currentRowCount + rowsToAdd > MAX_ROWS) {
+        rowsToAdd = MAX_ROWS - window.currentRowCount;
+    }
+
+    if (rowsToAdd <= 0) {
+        checkButtonStatus();
+        return;
+    }
+
+    for (let k = 0; k < rowsToAdd; k++) {
+        window.currentRowCount++;
+        const i = window.currentRowCount;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="row-num text-center align-top pt-2">${i}</td>
+            <td>
+                <input type="text" name="list${i}" id="list${i}" class="form-control form-control-sm mb-1" placeholder="รายการที่ ${i}" style="width: 100%;">
+                <textarea name="torlist${i}" id="torlist${i}" class="form-control form-control-sm" rows="2" placeholder="รายละเอียดคุณลักษณะเฉพาะ" style="width: 100%; background-color: #ffffff !important; color: #000000 !important; cursor: text;"></textarea>
+            </td>
+            <td class="align-top">
+                <input type="number" name="qu${i}" id="qu${i}" step="0.01" class="form-control form-control-sm qty-input text-center" oninput="calculateTotals()" placeholder="0" style="width: 100%;">
+            </td>
+            <td class="align-top">
+                <input type="text" name="un${i}" id="un${i}" class="form-control form-control-sm text-center" placeholder="หน่วย" list="unit_list" style="width: 100%;">
+            </td>
+            <td class="align-top">
+                <input type="number" name="pr${i}" id="pr${i}" step="0.01" class="form-control form-control-sm price-input text-end" oninput="calculateTotals()" placeholder="0.00" style="width: 100%;">
+            </td>
+            <td class="align-top">
+                <input type="text" name="am${i}" id="am${i}" value="0.00" readonly class="form-control form-control-sm text-end fw-bold text-success" style="width: 100%; background-color: #e9ecef !important;">
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    checkButtonStatus();
+}
+
+export function checkButtonStatus() {
+    const btn = document.getElementById('btnAddRows');
+    const msg = document.getElementById('rowLimitMsg');
+    const count = window.currentRowCount || 0;
+
+    if (!btn) return;
+
+    if (count >= MAX_ROWS) {
+        btn.style.display = 'none';
+        if (msg) {
+            msg.innerText = `ครบจำนวนสูงสุด ${MAX_ROWS} รายการแล้ว`;
+            msg.style.color = 'red';
+        }
+    } else {
+        btn.style.display = 'inline-block';
+        if (msg) {
+            msg.innerText = `แสดงอยู่ ${count} รายการ (สูงสุด ${MAX_ROWS})`;
+            msg.style.color = '#4a4a4a';
+        }
+    }
+}
+
+/**
+ * ✅ ตรวจสอบความถูกต้องของยอดเงินรวมเทียบกับงบที่ขอใช้ (LOG NO.)
+ */
+export function validateBudget() {
+    const qtyElem = document.getElementById('quantity');
+    const grandTotalElem = document.getElementById('cal_grandtotal');
+    const msgDiv = document.getElementById('validationMessage');
+    const logNoVal = document.getElementById('log_no')?.value.trim() || '';
+
+    if (!qtyElem || !grandTotalElem || !msgDiv) return false;
+
+    const budgetUseText = String(qtyElem.value || '').replace(/,/g, '');
+    const budgetUse = parseFloat(budgetUseText) || 0;
+    const grandTotal = parseFloat(grandTotalElem.dataset.value || String(grandTotalElem.value || '').replace(/,/g, '')) || 0;
+    const diff = Math.abs(budgetUse - grandTotal);
+
+    // ฟังก์ชันจัดรูปแบบตัวเลขเงิน (สำรองกรณีไม่มี formatMoney)
+    const fmt = (num) => (typeof formatMoney === 'function')
+        ? formatMoney(num)
+        : Number(num || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // ตรวจสอบว่าดึงข้อมูล LOG NO. มาหรือยัง (เช็กทั้งตัวแปร currentBudget และช่องกรอก)
+    const hasBudget = (typeof window.currentBudget !== 'undefined' && window.currentBudget !== null) || (logNoVal !== '' && budgetUse > 0);
+    if (!hasBudget) {
+        msgDiv.innerText = "⚠️ กรุณากรอก LOG NO. เพื่อตรวจสอบงบประมาณ";
+        msgDiv.style.color = "orange";
+        return false;
+    }
+
+    if (diff < 0.01) {
+        msgDiv.innerText = "✅ ถูกต้อง: ยอดรวมตรงกับงบที่ขอใช้";
+        msgDiv.style.color = "green";
+        return true;
+    } else {
+        let errorText = "❌ ไม่ถูกต้อง: ";
+        if (grandTotal > budgetUse) {
+            errorText += `ยอดเกินงบ ${fmt(grandTotal - budgetUse)} บาท`;
+        } else {
+            errorText += `ยอดต่ำกว่างบ ${fmt(budgetUse - grandTotal)} บาท`;
+        }
+        msgDiv.innerText = errorText;
+        msgDiv.style.color = "red";
+        return false;
+    }
+}
+
+
 // ============================================================================
 // 🌐 ATTACH TO WINDOW (สำหรับรองรับ inline onclick ใน HTML เดิม)
 // ============================================================================
@@ -2444,3 +2638,7 @@ window.calculateTotals = calculateTotals;
 window.updateRefDateDisplayOnly = updateRefDateDisplayOnly;
 window.updateCommittee = updateCommittee;
 window.handleNewTransaction = handleNewTransaction;
+window.onCommitteeNameChange = onCommitteeNameChange;
+window.addRowBatch = addRowBatch;
+window.checkButtonStatus = checkButtonStatus;
+window.validateBudget = validateBudget;
