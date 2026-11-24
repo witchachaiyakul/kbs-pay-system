@@ -38,12 +38,42 @@ export function normalizeDocType(typeInput) {
   return 'po';
 }
 
+export function getFiscalYearBE(dateStr) {
+  const [y, m] = String(dateStr).split('-').map(Number);
+  return m >= 10 ? y + 544 : y + 543;
+}
+
 export function isWorkingDay(dateObj, holidayList = []) {
   const day = dateObj.getDay();
-  if (day === 0 || day === 6) return false; // เสาร์-อาทิตย์
-  const dateStr = dateObj.toISOString().split('T')[0];
-  if (holidayList.includes(dateStr)) return false;
+  if (day === 0 || day === 6) return false; // ข้ามเสาร์-อาทิตย์
+  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+  if (holidayList.includes(dateStr)) return false; // ข้ามวันหยุดราชการ
   return true;
+}
+
+export function getFiscalWorkingDayNumber(targetDateStr, holidayList = []) {
+  const [y, m, d] = String(targetDateStr).split('-').map(Number);
+  const fiscalStartYear = m >= 10 ? y : y - 1;
+  const fiscalYearBE = fiscalStartYear + 544;
+
+  let curDate = new Date(fiscalStartYear, 9, 1); // 1 ตุลาคม (Month index 9 = ต.ค.)
+  const endDate = new Date(y, m - 1, d);
+
+  let workingDayCount = 0;
+  while (curDate <= endDate) {
+    if (isWorkingDay(curDate, holidayList)) {
+      workingDayCount++;
+    }
+    curDate.setDate(curDate.getDate() + 1);
+  }
+
+  return {
+    baseNo: workingDayCount > 0 ? workingDayCount : 1,
+    yearBE: fiscalYearBE
+  };
 }
 
 export function countWorkingDaysBetween(startDateStr, endDateStr, holidayList = []) {
@@ -68,9 +98,10 @@ export function countWorkingDaysBetween(startDateStr, endDateStr, holidayList = 
  */
 export function generateLogPoNumber(docTypeInput, prDateStr, existingLogs = [], holidayList = []) {
   const docType = normalizeDocType(docTypeInput);
-  const prDate = prDateStr ? new Date(prDateStr) : new Date();
-  const yearBE = prDate.getFullYear() + 543;
   const targetDateStr = prDateStr || new Date().toISOString().split('T')[0];
+
+  // 1. คำนวณเลขหลัก (baseNo) และปีงบประมาณ (yearBE) จากวันทำการตั้งแต่วันที่ 1 ต.ค.
+  const { baseNo, yearBE } = getFiscalWorkingDayNumber(targetDateStr, holidayList);
 
   const getSubNo = (item) => {
     if (!item) return 0;
@@ -80,39 +111,27 @@ export function generateLogPoNumber(docTypeInput, prDateStr, existingLogs = [], 
   };
 
   const getBaseNo = (item) => {
-    if (!item) return 1;
-    return Number(item.base_no || item.po_base_no) || 1;
+    if (!item) return 0;
+    return Number(item.base_no || item.po_base_no) || 0;
   };
 
-  // 1. กรองเฉพาะหมวดและปีเดียวกัน
-  const sameTypeAndYearLogs = existingLogs.filter(item => {
+  // 2. ตรวจสอบว่าในหมวดและปีงบประมาณเดียวกัน มีรายการในวันที่เลือก (หรือเลขหลักเดียวกัน) อยู่แล้วหรือไม่
+  const sameDateLogs = existingLogs.filter(item => {
     if (!item) return false;
     const itemType = normalizeDocType(item.doc_type);
+    if (itemType !== docType) return false;
+
+    if (item.pr_date === targetDateStr) return true;
+
     const itemYear = Number(item.year_be || item.po_year_be) || 0;
-    let y = itemYear;
-    if (y === 0 && item.pr_date) y = new Date(item.pr_date).getFullYear() + 543;
-    return itemType === docType && (y === 0 || y === yearBE);
+    return itemYear === yearBE && getBaseNo(item) === baseNo;
   });
 
-  if (sameTypeAndYearLogs.length === 0) {
-    return {
-      log_po: `${1}/${yearBE}`,
-      base_no: 1,
-      sub_no: 1,
-      year_be: yearBE,
-      doc_type: docType
-    };
-  }
-
-  // 2. ตรวจสอบรายการในวันเดียวกัน (targetDateStr)
-  const sameDateLogs = sameTypeAndYearLogs.filter(item => item.pr_date === targetDateStr);
-
+  // 3. ถ้ามีรายการในวันเดียวกันอยู่แล้ว -> ออกเลขทับย่อย (baseNo / subNo / yearBE)
   if (sameDateLogs.length > 0) {
     sameDateLogs.sort((a, b) => getSubNo(b) - getSubNo(a));
-    const maxSameDate = sameDateLogs[0];
-    const baseNo = getBaseNo(maxSameDate);
-    const maxSubNo = getSubNo(maxSameDate);
-    const newSubNo = maxSubNo + 1; 
+    const maxSubNo = getSubNo(sameDateLogs[0]) || 1;
+    const newSubNo = maxSubNo + 1;
 
     return {
       log_po: `${baseNo}/${newSubNo}/${yearBE}`,
@@ -123,37 +142,14 @@ export function generateLogPoNumber(docTypeInput, prDateStr, existingLogs = [], 
     };
   }
 
-  // 3. ถ้าวันนั้นยังไม่มีรายการ ให้หารายการล่าสุดก่อนหน้านั้น
-  const pastLogs = sameTypeAndYearLogs.filter(item => item.pr_date && item.pr_date <= targetDateStr);
-
-  if (pastLogs.length > 0) {
-    pastLogs.sort((a, b) => {
-      if (a.pr_date !== b.pr_date) return a.pr_date.localeCompare(b.pr_date);
-      return getBaseNo(a) - getBaseNo(b);
-    });
-
-    const lastPast = pastLogs[pastLogs.length - 1];
-    const lastBaseNo = getBaseNo(lastPast);
-    
-    const workingDays = countWorkingDaysBetween(lastPast.pr_date, targetDateStr, holidayList);
-    const newBaseNo = lastBaseNo + (workingDays > 0 ? workingDays : 1);
-    
-    return {
-      log_po: `${newBaseNo}/${yearBE}`,
-      base_no: newBaseNo,
-      sub_no: 1,
-      year_be: yearBE,
-      doc_type: docType
-    };
-  } else {
-    return {
-      log_po: `1/${yearBE}`,
-      base_no: 1,
-      sub_no: 1,
-      year_be: yearBE,
-      doc_type: docType
-    };
-  }
+  // 4. ถ้ายังไม่มีรายการในวันนั้น -> ออกเลขหลักประจำวันทำการนั้น (baseNo / yearBE)
+  return {
+    log_po: `${baseNo}/${yearBE}`,
+    base_no: baseNo,
+    sub_no: 1,
+    year_be: yearBE,
+    doc_type: docType
+  };
 }
 
 // ============================================================================
@@ -162,8 +158,7 @@ export function generateLogPoNumber(docTypeInput, prDateStr, existingLogs = [], 
 
 export async function getLogPoDataFromFirestore() {
   try {
-    const q = query(collection(db, "log_po"), limit(500));
-    const querySnapshot = await getDocs(q);
+  const querySnapshot = await getDocs(collection(db, "log_po"));
     const list = [];
 
     querySnapshot.forEach(docSnap => {
@@ -250,7 +245,7 @@ export async function saveLogPoToFirestore(poData, docIdInput) {
     const docType = normalizeDocType(poData.doc_type);
     const baseNo = Number(poData.base_no) || 1;
     const subNo = Number(poData.sub_no) || 1;
-    const yearBe = Number(poData.year_be) || (new Date().getFullYear() + 543);
+    const yearBe = Number(poData.year_be) || getFiscalWorkingDayNumber(poData.pr_date || new Date().toISOString().split('T')[0], holidaysCache).yearBE;
 
     // 🎯 สร้าง Document ID ในรูปแบบเดียวกับระบบเดิม: ${docType}_${base}_${sub}_${year}
     const safeDocId = docIdInput || `${docType}_${baseNo}_${subNo}_${yearBe}`;

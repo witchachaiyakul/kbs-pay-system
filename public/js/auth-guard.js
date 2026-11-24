@@ -18,30 +18,27 @@ function redirectToMainPortal() {
 }
 
 /**
- * 🔍 ดึงสิทธิ์เฉพาะของระบบ kbs-pay (role และ permissions รายเมนู) จากคอลเลกชัน 'users'
+ * 🔍 ดึงสิทธิ์ของระบบ kbs-pay (role และ pay_permission) จากคอลเลกชัน 'committees'
  */
 async function fetchPayUserPermissions(docId, lineUserId, fallbackRole = "staff") {
   const extractPerms = (d) => ({
     role: (d.role || fallbackRole).toLowerCase(),
-    // อ่าน pay_permission เป็นหลัก (หากยังไม่เคยบันทึกใหม่ ให้ดึง permissions เดิมมาใช้ก่อน)
-    pay_permission: Array.isArray(d.pay_permission)
-      ? d.pay_permission
-      : (Array.isArray(d.permissions) ? d.permissions : undefined)
+    pay_permission: Array.isArray(d.pay_permission) ? d.pay_permission : undefined
   });
 
   try {
     if (docId) {
-      const userSnap = await getDoc(doc(db, "users", docId));
-      if (userSnap.exists()) return extractPerms(userSnap.data());
+      const commSnap = await getDoc(doc(db, "committees", docId));
+      if (commSnap.exists()) return extractPerms(commSnap.data());
     }
 
     if (lineUserId) {
-      const q = query(collection(db, "users"), where("line_user_id", "==", lineUserId));
+      const q = query(collection(db, "committees"), where("line_user_id", "==", lineUserId));
       const snap = await getDocs(q);
       if (!snap.empty) return extractPerms(snap.docs[0].data());
     }
   } catch (err) {
-    console.warn("⚠️ ดึงสิทธิ์จาก users ไม่สำเร็จ ใช้สิทธิ์พื้นฐานแทน:", err);
+    console.warn("⚠️ ดึงสิทธิ์จาก committees ไม่สำเร็จ ใช้สิทธิ์พื้นฐานแทน:", err);
   }
 
   return { role: fallbackRole.toLowerCase(), pay_permission: undefined };
@@ -187,6 +184,7 @@ function renderGlobalNavbar() {
         "budgetuse.html": "kbsbudgetuse",
         "log-pay.html": "kbslogno",
         "parcel.html": "kbsparcelmanage",
+        "dis-parcel.html": "dis-parcel",
         "role.html": "kbsUserManage",
         "asset-manage.html": "asset-manage"
       };
