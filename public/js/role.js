@@ -14,6 +14,7 @@ const ALL_MENUS = [
   { id: 'kbsbudgetuse', name: 'ตัดแผน', icon: 'bi-calculator-fill' },
   { id: 'kbslogno', name: 'เลขที่ใบสั่งซื้อสั่งจ้าง', icon: 'bi-card-heading' },
   { id: 'kbsparcelmanage', name: 'การบริหารพัสดุ', icon: 'bi-boxes' },
+  { id: 'dis-parcel', name: 'เบิกจ่ายพัสดุ ครุภัณฑ์', icon: 'bi-folder-fill' }, // 👈 ใช้ id: 'dis-parcel' ให้ตรงกัน
   { id: 'kbsUserManage', name: 'จัดการสิทธิ์ผู้ใช้งาน', icon: 'bi-people-fill' },
   { id: 'asset-manage', name: 'จัดการหมวดหมู่พัสดุ ครุภัณฑ์', icon: 'bi-folder-fill' }
 ];

@@ -5,7 +5,7 @@ import { doc, getDoc, collection, query, where, getDocs } from "https://www.gsta
 // ============================================================================
 // ⚙️ CONFIGURATION
 // ============================================================================
-const IS_DEV_MODE = true; // 🎯 ปิดเมื่อทดสอบรวมระบบผ่าน kbs-main
+const IS_DEV_MODE = false; // 🎯 ปิดเมื่อทดสอบรวมระบบผ่าน kbs-main
 const DEV_LINE_USER_ID = "Uee9e25daa4093ff804637d5c55c6be03";
 
 const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
