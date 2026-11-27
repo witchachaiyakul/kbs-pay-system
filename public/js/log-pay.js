@@ -23,7 +23,8 @@ let suppliersCache = [];
 const TYPE_LABEL = {
   po: '(ใบสั่งซื้อ)',
   wo: '(ใบสั่งจ้าง)',
-  fpo: '(สั่งซื้อน้ำมัน)'
+  fpo: '(สั่งซื้อน้ำมัน)',
+  co: '(สัญญา)'
 };
 
 // ============================================================================
@@ -35,6 +36,7 @@ export function normalizeDocType(typeInput) {
   const t = String(typeInput).trim().toLowerCase();
   if (t === 'b' || t === 'wo' || t.includes('จ้าง')) return 'wo';
   if (t === 'c' || t === 'fpo' || t.includes('น้ำมัน')) return 'fpo';
+  if (t === 'd' || t === 'co' || t === 'contract' || t.includes('สัญญา')) return 'co';
   return 'po';
 }
 
