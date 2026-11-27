@@ -91,6 +91,7 @@
         </div>
       </div>
     </div>
+    
 
     <!-- 2. เมนูตารางรายการโครงการ/กิจกรรม -->
     <div class="card-section mb-4">
@@ -108,19 +109,19 @@
         </div>
 
         <!-- ตารางแสดงรายการโครงการ -->
-        <div id="deptTableWrapper" class="table-responsive">
-          <table class="table table-bordered table-hover align-middle bg-white shadow-sm mb-0" style="table-layout: fixed; width: 100%;">
+        <div id="deptTableWrapper" class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+          <table class="table table-bordered table-hover align-middle bg-white shadow-sm mb-0" style="min-width: 1050px; width: 100%;">
             <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
-              <tr class="text-center small align-middle">
-                <th style="width: 9%;">ฝ่าย</th>
-                <th style="width: 19%;">ชื่อโครงการ</th>
-                <th style="width: 19%;">ชื่อกิจกรรม</th>
-                <th style="width: 8%;">ประเภทเงิน</th>
-                <th style="width: 8%;">งบตั้งไว้</th>
-                <th style="width: 8%;">ใช้ไปแล้ว</th>
-                <th style="width: 8%;">คงเหลือ</th>
-                <th style="width: 10%;">ผู้รับผิดชอบ</th>
-                <th style="width: 5%;">ดำเนินการ</th>
+              <tr class="text-center small align-middle text-nowrap">
+                <th style="width: 110px;">ฝ่าย</th>
+                <th style="width: 220px;">ชื่อโครงการ</th>
+                <th style="width: 220px;">ชื่อกิจกรรม</th>
+                <th style="width: 120px;">ประเภทเงิน</th>
+                <th style="width: 110px;" class="text-end">งบตั้งไว้</th>
+                <th style="width: 110px;" class="text-end">ใช้ไปแล้ว</th>
+                <th style="width: 110px;" class="text-end">คงเหลือ</th>
+                <th style="width: 140px;">ผู้รับผิดชอบ</th>
+                <th style="width: 115px;">ดำเนินการ</th>
               </tr>
             </thead>
             <tbody id="deptActivitiesTableBody">
@@ -304,6 +305,125 @@
             <i class="bi bi-arrow-counterclockwise me-2"></i>กลับไปทำรายการใหม่
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal แก้ไขยอดเงินโครงการ (คืนเงิน / ปรับวงเงิน) -->
+<div class="modal fade" id="editBudgetModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title fw-bold">
+          <i class="bi bi-pencil-square me-2"></i>แก้ไขยอดเงินโครงการ: <span id="editMdActivityName" class="text-navy"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body p-4 bg-light">
+        <!-- แสดงยอดปัจจุบัน -->
+        <div class="row g-2 mb-3 text-center">
+          <div class="col-4">
+            <div class="p-2 bg-white border rounded shadow-sm">
+              <small class="text-muted d-block">งบตั้งไว้ (total_budget)</small>
+              <span id="editCurTotal" class="fw-bold fs-6 text-dark">0.00 ฿</span>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 bg-white border rounded shadow-sm">
+              <small class="text-muted d-block">ใช้ไปแล้ว (used_budget)</small>
+              <span id="editCurUsed" class="fw-bold fs-6 text-danger">0.00 ฿</span>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 bg-white border rounded shadow-sm">
+              <small class="text-muted d-block">คงเหลือ (remaining_budget)</small>
+              <span id="editCurRemain" class="fw-bold fs-6 text-success">0.00 ฿</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ตัวเลือก 1. คืนเงิน / 2. ปรับวงเงิน -->
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body">
+            <label class="form-label fw-bold text-navy mb-2">เลือกรายการที่ต้องการดำเนินการ:</label>
+            <div class="d-flex flex-wrap gap-4 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkRefundMode" onchange="selectBudgetEditOption('refund')">
+                <label class="form-check-label fw-bold text-success" for="chkRefundMode">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> 1. คืนเงิน
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkAdjustLimitMode" onchange="selectBudgetEditOption('adjust')">
+                <label class="form-check-label fw-bold text-danger" for="chkAdjustLimitMode">
+                  <i class="bi bi-cash-coin me-1"></i> 2. ปรับวงเงิน
+                </label>
+              </div>
+            </div>
+
+            <!-- กล่องกรอกข้อมูล 1. คืนเงิน -->
+            <div id="boxRefundInput" class="p-3 bg-success bg-opacity-10 border border-success rounded mb-3 d-none">
+              <label for="inpRefundAmount" class="form-label fw-bold text-success">ยอดเงินที่คืน (บาท)</label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-lg border-success fw-bold text-success" id="inpRefundAmount" placeholder="0.00" oninput="calculateEditBudgetPreview()">
+              <small class="text-muted d-block mt-1">* ระบบจะลดยอดใช้ไปแล้ว (used_budget) และเพิ่มยอดคงเหลือ (remaining_budget) ให้อัตโนมัติ</small>
+            </div>
+
+            <!-- กล่องกรอกข้อมูล 2. ปรับวงเงิน -->
+            <div id="boxAdjustLimitInput" class="p-3 bg-danger bg-opacity-10 border border-danger rounded mb-3 d-none">
+              <label for="inpNewTotalBudget" class="form-label fw-bold text-danger">ยอดวงเงินตั้งไว้ใหม่ (total_budget) (บาท)</label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-lg border-danger fw-bold text-danger" id="inpNewTotalBudget" placeholder="0.00" oninput="calculateEditBudgetPreview()">
+              <small class="text-muted d-block mt-1">* ระบบจะคำนวณ remaining_budget = total_budget (ใหม่) - used_budget ให้อัตโนมัติ</small>
+            </div>
+
+            <!-- ตารางสรุปยอดหลังคำนวณ -->
+            <div id="boxEditPreviewTable" class="d-none">
+              <table class="table table-sm table-bordered bg-white text-center align-middle mb-2">
+                <thead class="table-light small">
+                  <tr>
+                    <th>ฟิลด์ใน budget_plans</th>
+                    <th>ยอดเดิม</th>
+                    <th>ยอดใหม่ที่จะบันทึก</th>
+                  </tr>
+                </thead>
+                <tbody class="fw-semibold">
+                  <tr>
+                    <td class="text-start">งบตั้งไว้ (<code>total_budget</code>)</td>
+                    <td id="prevOldTotal" class="text-muted">0.00</td>
+                    <td id="prevNewTotal" class="text-dark fw-bold">0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="text-start">ใช้ไปแล้ว (<code>used_budget</code>)</td>
+                    <td id="prevOldUsed" class="text-muted">0.00</td>
+                    <td id="prevNewUsed" class="text-danger fw-bold">0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="text-start">คงเหลือ (<code>remaining_budget</code>)</td>
+                    <td id="prevOldRemain" class="text-muted">0.00</td>
+                    <td id="prevNewRemain" class="text-success fw-bold">0.00</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="mt-2">
+                <label for="inpEditBudgetRemark" class="form-label small fw-bold text-muted">หมายเหตุ / เหตุผลการปรับปรุงยอด</label>
+                <input type="text" class="form-control form-control-sm" id="inpEditBudgetRemark" placeholder="ระบุเหตุผล (ถ้ามี)">
+              </div>
+            </div>
+
+            <div id="alertEditBudgetError" class="alert alert-danger py-2 px-3 mt-2 mb-0 small d-none">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i> <span id="editBudgetErrorMsg"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer bg-white">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-warning fw-bold px-4" id="btnSaveEditBudget" onclick="submitEditBudgetPlan()" disabled>
+          <i class="bi bi-check-circle-fill me-1"></i> ยืนยันบันทึกยอดเงิน
+        </button>
       </div>
     </div>
   </div>

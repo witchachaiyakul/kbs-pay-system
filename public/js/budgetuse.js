@@ -19,6 +19,9 @@ let currentSelectedActivity = null;
 let currentEditingLogNo = null;
 let originalEditingAmount = 0;
 let disburseHistoryCache = [];
+let currentEditBudgetItem = null;
+let selectedEditOption = null; // 'refund' | 'adjust'
+let previewBudgetResult = null;
 
 // ============================================================================
 // 🛠️ HELPER FUNCTIONS
@@ -121,24 +124,25 @@ export async function filterByDept(deptName) {
       tbody.innerHTML = list.map(item => `
         <tr>
           <td class="text-center fw-semibold text-navy text-wrap text-break">${item.division}</td>
-          <td class="text-wrap text-break">
+          <td style="min-width: 200px;">
             <div class="fw-bold text-dark">${item.project_name}</div>
             <small class="text-muted">รหัส: ${item.project_id}</small>
           </td>
-          <td class="text-wrap text-break">
-            <strong class="text-primary">${item.activity_name}</strong>
-          </td>
-          <td class="text-center align-middle p-1"> 
-            <span class="badge bg-secondary text-wrap" style="max-width: 100%; white-space: normal; line-height: 1.3;"> ${item.fund_type} </span> 
-          </td>
+          <td style="min-width: 200px;">${item.activity_name || '-'}</td>
+          <td class="text-center text-nowrap"><span class="badge bg-secondary">${item.fund_type || '-'}</span></td>
           <td class="text-end fw-bold text-dark text-nowrap">${item.total_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
           <td class="text-end fw-bold text-danger text-nowrap">${item.used_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
           <td class="text-end fw-bold text-success fs-6 text-nowrap">${item.remaining_budget.toLocaleString('th-TH', {minimumFractionDigits: 2})}</td>
           <td class="text-center small text-wrap text-break">${item.responsible_person}</td>
           <td class="text-center align-middle p-1">
-            <button type="button" class="btn btn-navy btn-sm px-2 py-1 fw-bold shadow-sm w-100" onclick="openDisburseModalById('${item.project_id}')">
-              <i class="bi bi-scissors me-1"></i>ตัดจ่าย
-            </button>
+            <div class="d-grid gap-1">
+              <button type="button" class="btn btn-navy btn-sm px-2 py-1 fw-bold shadow-sm" onclick="openDisburseModalById('${item.project_id}')">
+                <i class="bi bi-scissors me-1"></i>ตัดจ่าย
+              </button>
+              <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 py-1 fw-bold shadow-sm" onclick="openEditBudgetModalById('${item.project_id}')">
+                <i class="bi bi-pencil-square me-1"></i>แก้ไขยอด
+              </button>
+            </div>
           </td>
         </tr>
       `).join('');
@@ -428,6 +432,7 @@ export async function submitDisbursePlanDoc() {
         newRemainBudget = oldTotal - newUsedBudget;
 
         transaction.update(logBudgetRef, {
+          fund_type: currentSelectedActivity.fund_type || currentPlanData.fund_type || logData.fund_type || 'งบประมาณ', // ✅ อัปเดตให้ครบถ้วน
           method: purchaseType,
           buyer: applicant,
           details: remark,
@@ -462,13 +467,14 @@ export async function submitDisbursePlanDoc() {
           updated_at: serverTimestamp()
         }, { merge: true });
 
-        const logBudgetRef = doc(db, "log_budget", logNo);
+    const logBudgetRef = doc(db, "log_budget", logNo);
         transaction.set(logBudgetRef, {
           log_no: logNo,
           project_id: projectId,
           activities: currentSelectedActivity.activity_name || '-',
           project_name: currentSelectedActivity.project_name || '-',
           division: currentSelectedActivity.division || '-',
+          fund_type: currentSelectedActivity.fund_type || currentPlanData.fund_type || currentPlanData.ประเภทเงิน || 'งบประมาณ', // ✅ เพิ่มบรรทัดนี้
           method: purchaseType,
           buyer: applicant,
           details: remark,
@@ -594,6 +600,237 @@ export function resetAndReopenDisburse() {
   }
 }
 
+export function openEditBudgetModalById(projectId) {
+  const plans = window.budgetPlansCache || [];
+  const item = plans.find(p => String(p.project_id) === String(projectId) || String(p.id) === String(projectId));
+  if (!item) return;
+
+  currentEditBudgetItem = item;
+  selectedEditOption = null;
+  previewBudgetResult = null;
+
+  const total = Number(item.total_budget || 0);
+  const used = Number(item.used_budget || 0);
+  const remain = Number(item.remaining_budget ?? (total - used));
+  const fmt = (n) => n.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + ' ฿';
+
+  document.getElementById('editMdActivityName').innerText = `${item.activity_name} (${item.project_id})`;
+  document.getElementById('editCurTotal').innerText = fmt(total);
+  document.getElementById('editCurUsed').innerText = fmt(used);
+  document.getElementById('editCurRemain').innerText = fmt(remain);
+
+  // รีเซ็ตค่าฟอร์ม
+  document.getElementById('chkRefundMode').checked = false;
+  document.getElementById('chkAdjustLimitMode').checked = false;
+  document.getElementById('boxRefundInput').classList.add('d-none');
+  document.getElementById('boxAdjustLimitInput').classList.add('d-none');
+  document.getElementById('boxEditPreviewTable').classList.add('d-none');
+  document.getElementById('alertEditBudgetError').classList.add('d-none');
+  document.getElementById('inpRefundAmount').value = '';
+  document.getElementById('inpNewTotalBudget').value = total;
+  document.getElementById('inpEditBudgetRemark').value = '';
+  document.getElementById('btnSaveEditBudget').disabled = true;
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('editBudgetModal')).show();
+}
+
+export function selectBudgetEditOption(option) {
+  const chkRefund = document.getElementById('chkRefundMode');
+  const chkAdjust = document.getElementById('chkAdjustLimitMode');
+  const boxRefund = document.getElementById('boxRefundInput');
+  const boxAdjust = document.getElementById('boxAdjustLimitInput');
+  const boxPreview = document.getElementById('boxEditPreviewTable');
+
+  if (option === 'refund' && chkRefund.checked) {
+    chkAdjust.checked = false;
+    selectedEditOption = 'refund';
+    boxRefund.classList.remove('d-none');
+    boxAdjust.classList.add('d-none');
+    boxPreview.classList.remove('d-none');
+    document.getElementById('inpRefundAmount').value = '';
+    document.getElementById('inpRefundAmount').focus();
+  } else if (option === 'adjust' && chkAdjust.checked) {
+    chkRefund.checked = false;
+    selectedEditOption = 'adjust';
+    boxAdjust.classList.remove('d-none');
+    boxRefund.classList.add('d-none');
+    boxPreview.classList.remove('d-none');
+    document.getElementById('inpNewTotalBudget').value = Number(currentEditBudgetItem?.total_budget || 0);
+    document.getElementById('inpNewTotalBudget').focus();
+  } else {
+    selectedEditOption = null;
+    boxRefund.classList.add('d-none');
+    boxAdjust.classList.add('d-none');
+    boxPreview.classList.add('d-none');
+    document.getElementById('alertEditBudgetError').classList.add('d-none');
+    document.getElementById('btnSaveEditBudget').disabled = true;
+    return;
+  }
+
+  calculateEditBudgetPreview();
+}
+
+// คำนวณยอดทั้ง 3 ฟิลด์ให้สัมพันธ์กันแบบ Real-time
+export function calculateEditBudgetPreview() {
+  if (!currentEditBudgetItem || !selectedEditOption) return;
+
+  const oldTotal = Number(currentEditBudgetItem.total_budget || 0);
+  const oldUsed = Number(currentEditBudgetItem.used_budget || 0);
+  const oldRemain = Number(currentEditBudgetItem.remaining_budget ?? (oldTotal - oldUsed));
+
+  let newTotal = oldTotal;
+  let newUsed = oldUsed;
+  let newRemain = oldRemain;
+  let changeAmount = 0;
+  let isValid = true;
+  let errText = '';
+
+  if (selectedEditOption === 'refund') {
+    const refundAmt = parseFloat(document.getElementById('inpRefundAmount').value || 0);
+    changeAmount = refundAmt;
+
+    if (refundAmt <= 0) {
+      isValid = false;
+      errText = 'กรุณาระบุยอดเงินที่คืนมากกว่า 0 บาท';
+    } else if (refundAmt > oldUsed) {
+      isValid = false;
+      errText = `ยอดคืนเงิน (${refundAmt.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿) ต้องไม่เกินยอดใช้ไปแล้ว (${oldUsed.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿)`;
+    } else {
+      newTotal = oldTotal;
+      newUsed = oldUsed - refundAmt;
+      newRemain = newTotal - newUsed;
+    }
+  } else if (selectedEditOption === 'adjust') {
+    const inputTotal = parseFloat(document.getElementById('inpNewTotalBudget').value);
+
+    if (isNaN(inputTotal) || inputTotal < 0) {
+      isValid = false;
+      errText = 'กรุณาระบุวงเงินตั้งไว้ใหม่ให้ถูกต้อง';
+    } else if (inputTotal < oldUsed) {
+      isValid = false;
+      errText = `วงเงินใหม่ (${inputTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿) ต้องไม่น้อยกว่ายอดที่ใช้ไปแล้ว (${oldUsed.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿)`;
+    } else {
+      changeAmount = inputTotal - oldTotal;
+      newTotal = inputTotal;
+      newUsed = oldUsed;
+      newRemain = newTotal - newUsed;
+    }
+  }
+
+  const fmt = (n) => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('prevOldTotal').innerText = fmt(oldTotal);
+  document.getElementById('prevOldUsed').innerText = fmt(oldUsed);
+  document.getElementById('prevOldRemain').innerText = fmt(oldRemain);
+
+  document.getElementById('prevNewTotal').innerText = fmt(newTotal);
+  document.getElementById('prevNewUsed').innerText = fmt(newUsed);
+  document.getElementById('prevNewRemain').innerText = fmt(newRemain);
+
+  const alertEl = document.getElementById('alertEditBudgetError');
+  const btnSave = document.getElementById('btnSaveEditBudget');
+
+  if (!isValid) {
+    document.getElementById('editBudgetErrorMsg').innerText = errText;
+    alertEl.classList.remove('d-none');
+    btnSave.disabled = true;
+    previewBudgetResult = null;
+  } else {
+    alertEl.classList.add('d-none');
+    btnSave.disabled = false;
+    previewBudgetResult = {
+      mode: selectedEditOption,
+      oldTotal,
+      oldUsed,
+      oldRemain,
+      newTotal,
+      newUsed,
+      newRemain,
+      changeAmount
+    };
+  }
+}
+
+// บันทึกข้อมูลลง budget_plans (total_budget, used_budget, remaining_budget)
+export async function submitEditBudgetPlan() {
+  if (!currentEditBudgetItem || !previewBudgetResult) return;
+
+  const btnSave = document.getElementById('btnSaveEditBudget');
+  const remark = document.getElementById('inpEditBudgetRemark')?.value?.trim() || '';
+  btnSave.disabled = true;
+  btnSave.innerHTML = '⏳ กำลังบันทึก...';
+
+  try {
+    const docId = currentEditBudgetItem.id || currentEditBudgetItem.project_id;
+    const planRef = doc(db, "budget_plans", docId);
+
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(planRef);
+      if (!snap.exists()) throw new Error("ไม่พบเอกสารโครงการในฐานข้อมูล");
+
+      const data = snap.data();
+      const dbTotal = Number(data.total_budget ?? data.budget_set ?? 0);
+      const dbUsed = Number(data.used_budget ?? data.budget_used ?? 0);
+
+      let finalTotal = dbTotal;
+      let finalUsed = dbUsed;
+      let finalRemain = dbTotal - dbUsed;
+
+      if (previewBudgetResult.mode === 'refund') {
+        const refundAmt = previewBudgetResult.changeAmount;
+        if (refundAmt > dbUsed) throw new Error("ยอดคืนเงินเกินกว่ายอดใช้จ่ายจริงล่าสุดในระบบ");
+        finalUsed = dbUsed - refundAmt;
+        finalRemain = finalTotal - finalUsed;
+      } else if (previewBudgetResult.mode === 'adjust') {
+        finalTotal = previewBudgetResult.newTotal;
+        if (finalTotal < dbUsed) throw new Error("วงเงินใหม่น้อยกว่ายอดใช้จ่ายจริงล่าสุดในระบบ");
+        finalRemain = finalTotal - finalUsed;
+      }
+
+      transaction.update(planRef, {
+        total_budget: finalTotal,
+        used_budget: finalUsed,
+        remaining_budget: finalRemain,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    // บันทึกประวัติลง log_budget เพื่อเก็บหลักฐานการแก้ไข
+    const logNo = await getNextLogNo();
+    const methodText = previewBudgetResult.mode === 'refund' ? 'คืนเงินเข้าโครงการ' : 'ปรับวงเงินโครงการ';
+    await setDoc(doc(db, "log_budget", logNo), {
+      log_no: logNo,
+      project_id: docId,
+      activities: currentEditBudgetItem.activity_name || '-',
+      project_name: currentEditBudgetItem.project_name || '-',
+      division: currentEditBudgetItem.division || '-',
+      fund_type: currentEditBudgetItem.fund_type || 'งบประมาณ',
+      method: methodText,
+      buyer: 'เจ้าหน้าที่การเงิน/แผนงาน',
+      details: remark || methodText,
+      balance_before: previewBudgetResult.oldRemain,
+      budget_use: previewBudgetResult.mode === 'refund'
+        ? -Math.abs(previewBudgetResult.changeAmount)
+        : previewBudgetResult.changeAmount,
+      balance_after: previewBudgetResult.newRemain,
+      status: 'adjusted',
+      createdAt: serverTimestamp()
+    });
+
+    bootstrap.Modal.getInstance(document.getElementById('editBudgetModal'))?.hide();
+    alert(`✅ บันทึก${methodText}เรียบร้อยแล้ว`);
+
+    // โหลดตารางฝ่ายเดิมซ้ำเพื่ออัปเดตตัวเลขล่าสุดทันที
+    const currentDept = document.getElementById('selectedDeptName')?.innerText;
+    if (currentDept && currentDept !== 'เลือกฝ่ายด้านบน') {
+      await filterByDept(currentDept);
+    }
+  } catch (err) {
+    alert('❌ เกิดข้อผิดพลาดในการบันทึก: ' + err.message);
+  } finally {
+    btnSave.disabled = false;
+    btnSave.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> ยืนยันบันทึกยอดเงิน';
+  }
+}
 // ============================================================================
 // 🚀 DOM READY & INITIALIZATION
 // ============================================================================
@@ -613,3 +850,7 @@ window.editDisburseLog = editDisburseLog;
 window.cancelEditMode = cancelEditMode;
 window.resetFormToMain = resetFormToMain;
 window.resetAndReopenDisburse = resetAndReopenDisburse;
+window.openEditBudgetModalById = openEditBudgetModalById;
+window.selectBudgetEditOption = selectBudgetEditOption;
+window.calculateEditBudgetPreview = calculateEditBudgetPreview;
+window.submitEditBudgetPlan = submitEditBudgetPlan;

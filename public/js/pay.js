@@ -1200,18 +1200,22 @@ export async function saveKbsPayData(payload) {
 export async function getOfficerByDivision(divisionName) {
   if (!divisionName) return "";
   try {
+    const targetDiv = divisionName.trim();
     const officersRef = collection(db, "officers");
-    const q = query(
-      officersRef,
-      where("division", "==", divisionName.trim()),
-      where("pos", "==", "เจ้าหน้าที่")
-    );
+    const q = query(officersRef, where("pos", "==", "เจ้าหน้าที่"));
     const querySnapshot = await getDocs(q);
 
-    if (!querySnapshot.empty) {
-      const officerData = querySnapshot.docs[0].data();
-      return officerData.name || "";
+    for (const docSnap of querySnapshot.docs) {
+      const officerData = docSnap.data();
+      const assignedDivs = Array.isArray(officerData.divisions) && officerData.divisions.length > 0
+        ? officerData.divisions.map(d => String(d).trim())
+        : String(officerData.division || "").split(",").map(d => d.trim());
+
+      if (assignedDivs.includes(targetDiv)) {
+        return officerData.name || "";
+      }
     }
+
     return "";
   } catch (error) {
     console.error("❌ เกิดข้อผิดพลาดในการดึงข้อมูล officer จาก Firestore:", error);
@@ -1259,10 +1263,10 @@ export async function prepareDocDataForMicroservice(data, items) {
   const divisionTitle = divStr ? `${divPrefix}${divStr}` : "";
 
   let committeePerson = "";
-  if (divStr.includes("บริหารทั่วไป")) committeePerson = "ว่าที่ร้อยตรีศรายุทธ พงค์ทองเมือง";
+  if (divStr.includes("บุคคล")) committeePerson = "ว่าที่ร้อยตรีศรายุทธ พงค์ทองเมือง";
   else if (divStr.includes("วิชาการ")) committeePerson = "นางคนึงนิตย์ แฉล้มรักษ์";
-  else if (divStr.includes("บุคคล")) committeePerson = "นางสาวสุทธิดา ธนบัตร";
-  else if (divStr.includes("งบประมาณ")) committeePerson = "นางสาวเปรมฤดี จูหลง";
+  else if (divStr.includes("งบประมาณ")) committeePerson = "นางสาวสุทธิดา ธนบัตร";
+  else if (divStr.includes("บริหารทั่วไป")) committeePerson = "นายวัชระ เปียกบุตร";
   else if (divStr.includes("กิจการนักเรียน")) committeePerson = "นายจีรพจน์ ทองขาว";
 
   // 🎯 ค้นหาเจ้าหน้าที่ (officer) จาก Firestore ตามกลุ่มงาน (division)
@@ -1326,8 +1330,8 @@ export async function prepareDocDataForMicroservice(data, items) {
     committee: committeePerson,
 
     officer: calculatedOfficer, 
-    DB_director: "นางสาวเปรมฤดี จูหลง",
-    head_officer: "นางสาวเปรมฤดี จูหลง",
+    DB_director: "นางสาวสุธิดา ธนบัตร",
+    head_officer: "นางสาวสุธิดา ธนบัตร",
     director: "นายเกียรติมงคล พูดเพราะ",
     financial_officer: "นางพรทิพย์ คงมาก",
 

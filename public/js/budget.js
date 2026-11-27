@@ -5,7 +5,6 @@ import {
     query, 
     where, 
     getDocs, 
-    limit,
     addDoc,
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -22,46 +21,65 @@ if (typeof google !== 'undefined' && google.charts) {
   google.charts.load('current', { 'packages': ['corechart'] });
   google.charts.setOnLoadCallback(() => {
     isGoogleChartsReady = true;
-    // หากมีข้อมูลอยู่ใน Cache แล้วให้สั่งวาดกราฟซ้ำอีกครั้งเมื่อไลบรารีพร้อม
     if (window.budgetPlansCache && window.budgetPlansCache.length > 0) {
       renderOverviewCharts(window.budgetPlansCache);
     }
   });
 }
 
+// ฟังก์ชันช่วยตรวจสอบว่า project_id ขึ้นต้นด้วย "70" หรือไม่
+function isProject70(projectId, docId) {
+  const idStr = String(projectId || docId || '').trim();
+  return idStr.startsWith('70');
+}
+
 // ============================================================================
-// 📊 1. FIRESTORE BUDGET PLANS FETCH ENGINE
+// 📊 1. FIRESTORE BUDGET PLANS FETCH ENGINE (เฉพาะรหัสขึ้นต้นด้วย 70)
 // ============================================================================
 
 export async function getBudgetPlans(fundTypeFilter = null) {
   try {
     const plansRef = collection(db, "budget_plans");
-    let q = fundTypeFilter 
-      ? query(plansRef, where("fund_type", "==", fundTypeFilter))
-      : query(plansRef, limit(500));
+    // ดึงเฉพาะเอกสารที่ project_id ขึ้นต้นด้วย "70" (70000 - 70999)
+    const q = query(
+      plansRef,
+      where("project_id", ">=", "70"),
+      where("project_id", "<", "71")
+    );
 
     const querySnapshot = await getDocs(q);
     const plans = [];
 
     querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      const total = Number(data.total_budget || data.budget_set || data.amount || 0);
-      const used = Number(data.used_budget || data.budget_used || 0);
-      const remain = Number(data.remaining_budget || (total - used));
+      const projectId = String(data.project_id || docSnap.id).trim();
+
+      // กรองย้ำอีกครั้งให้มั่นใจว่าขึ้นต้นด้วย 70 และตรงกับ fundTypeFilter (ถ้ามี)
+      if (!isProject70(projectId, docSnap.id)) return;
+      const fundType = String(data.fund_type || data.ประเภทเงิน || 'อื่นๆ').trim();
+      if (fundTypeFilter && fundType !== fundTypeFilter) return;
+
+      const total = Number(data.total_budget ?? data.budget_set ?? data.amount ?? 0);
+      const used = Number(data.used_budget ?? data.budget_used ?? 0);
+      const remain = data.remaining_budget !== undefined
+        ? Number(data.remaining_budget)
+        : (total - used);
 
       plans.push({
         id: docSnap.id,
-        project_id: data.project_id || docSnap.id,
-        division: data.division || data.ฝ่าย || 'ไม่ระบุ',
+        project_id: projectId,
+        division: String(data.division || data.ฝ่าย || 'ไม่ระบุ').trim(),
         project_name: data.project_name || data.โครงการ || '-',
         activity_name: data.activity_name || data.กิจกรรม || '-',
-        fund_type: data.fund_type || data.ประเภทเงิน || 'อื่นๆ',
+        fund_type: fundType,
         total_budget: total,
         used_budget: used,
         remaining_budget: remain,
         responsible_person: data.responsible_person || data.owner || data.ผู้รับผิดชอบ || '-'
       });
     });
+
+    plans.sort((a, b) => a.project_id.localeCompare(b.project_id, undefined, { numeric: true }));
 
     return { success: true, totalCount: plans.length, data: plans };
   } catch (error) {
@@ -81,17 +99,28 @@ export async function getBudgetPlansByDept(deptName) {
 
     querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      const total = Number(data.total_budget || data.budget_set || data.amount || 0);
-      const used = Number(data.used_budget || data.budget_used || 0);
+      const projectId = String(data.project_id || docSnap.id).trim();
+
+      // แสดงเฉพาะรายการที่รหัสขึ้นต้นด้วย 70 เท่านั้น
+      if (!isProject70(projectId, docSnap.id)) return;
+
+      const total = Number(data.total_budget ?? data.budget_set ?? data.amount ?? 0);
+      const used = Number(data.used_budget ?? data.budget_used ?? 0);
+      const remain = data.remaining_budget !== undefined
+        ? Number(data.remaining_budget)
+        : (total - used);
 
       list.push({
         id: docSnap.id,
         ...data,
+        project_id: projectId,
         total_budget: total,
         used_budget: used,
-        remaining_budget: Number(data.remaining_budget || (total - used))
+        remaining_budget: remain
       });
     });
+
+    list.sort((a, b) => a.project_id.localeCompare(b.project_id, undefined, { numeric: true }));
 
     return { success: true, data: list };
   } catch (error) {
@@ -110,17 +139,27 @@ export async function loadKbsBudgetData() {
   const response = await getBudgetPlans();
   if (response && response.success) {
     const plans = response.data || [];
-    window.budgetPlansCache = plans; // บันทึก Cache หน้าบ้าน
+    window.budgetPlansCache = plans; // บันทึก Cache เฉพาะรหัส 70xxx
 
     let grandTotalBudget = 0;
     let grandUsedBudget = 0;
     let grandRemainingBudget = 0;
     const fundSummary = {};
 
+    const addSummary = (key, total, used, remain) => {
+      if (!fundSummary[key]) {
+        fundSummary[key] = { total: 0, used: 0, remain: 0, count: 0 };
+      }
+      fundSummary[key].total += total;
+      fundSummary[key].used += used;
+      fundSummary[key].remain += remain;
+      fundSummary[key].count += 1;
+    };
+
     plans.forEach(data => {
       const total = Number(data.total_budget || 0);
       const used = Number(data.used_budget || 0);
-      const remain = Number(data.remaining_budget || (total - used));
+      const remain = Number(data.remaining_budget ?? (total - used));
 
       grandTotalBudget += total;
       grandUsedBudget += used;
@@ -128,25 +167,16 @@ export async function loadKbsBudgetData() {
 
       const fundType = String(data.fund_type || 'อื่นๆ').trim();
 
-      // 1. สรุปยอดตามชื่อ fund_type แต่ละหมวดตรงๆ
-      if (!fundSummary[fundType]) {
-        fundSummary[fundType] = { total: 0, used: 0, remain: 0, count: 0 };
-      }
-      fundSummary[fundType].total += total;
-      fundSummary[fundType].used += used;
-      fundSummary[fundType].remain += remain;
-      fundSummary[fundType].count += 1;
+      // 1. สรุปยอดตามชื่อ fund_type ตรงๆ
+      addSummary(fundType, total, used, remain);
+
+      // จับคู่ชื่อย่อในข้อมูลปี 2570 ให้ตรงกับการ์ดบนหน้าเว็บ
+      if (fundType === 'รายได้ Eng') addSummary('รายได้ ภาษาอังกฤษ', total, used, remain);
+      if (fundType === 'รายได้ China') addSummary('รายได้ ภาษาจีน', total, used, remain);
 
       // 2. เงื่อนไขพิเศษ: ถ้า fund_type มีคำว่า "รายได้" ให้สะสมยอดเข้า "รายได้สถานศึกษารวม" ด้วย
       if (fundType.includes('รายได้')) {
-        const keyTotal = 'รายได้สถานศึกษารวม';
-        if (!fundSummary[keyTotal]) {
-          fundSummary[keyTotal] = { total: 0, used: 0, remain: 0, count: 0 };
-        }
-        fundSummary[keyTotal].total += total;
-        fundSummary[keyTotal].used += used;
-        fundSummary[keyTotal].remain += remain;
-        fundSummary[keyTotal].count += 1;
+        addSummary('รายได้สถานศึกษารวม', total, used, remain);
       }
     });
 
@@ -160,10 +190,10 @@ export async function loadKbsBudgetData() {
     if (document.getElementById('kpiTotalRemain')) document.getElementById('kpiTotalRemain').innerText = grandRemainingBudget.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + ' ฿';
     if (document.getElementById('kpiTotalProgress')) document.getElementById('kpiTotalProgress').innerText = progressPercent + ' %';
 
-    // 🎯 1. อัปเดตการ์ดสรุปความคืบหน้าด้านล่าง (12 การ์ด)
+    // 🎯 1. อัปเดตการ์ดสรุปความคืบหน้าด้านล่าง
     updateFundCardLabels(fundSummary);
 
-    // 🎯 2. อัปเดต 3 กราฟภาพรวมด้านบน (donutDept, donutTypeBudget, donutTypeSpent)
+    // 🎯 2. อัปเดต 3 กราฟภาพรวมด้านบน
     renderOverviewCharts(plans);
 
   } else {
@@ -189,22 +219,39 @@ function showKpiErrorState(errMsg) {
 // 🎨 3. CHART RENDER ENGINE & SAFE DRAWING
 // ============================================================================
 
-// ฟังก์ชันสำหรับเรียกวาด Google Chart อย่างปลอดภัย (ดักรอ Async โหลดเสร็จ)
-function safeDrawPieChart(containerId, dataArray, options) {
+function safeDrawPieChart(containerId, dataArray, options, onSelectCallback = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
   if (!isGoogleChartsReady || typeof google === 'undefined' || !google.visualization || typeof google.visualization.PieChart !== 'function') {
-    setTimeout(() => safeDrawPieChart(containerId, dataArray, options), 200);
+    setTimeout(() => safeDrawPieChart(containerId, dataArray, options, onSelectCallback), 200);
     return;
   }
 
   const data = google.visualization.arrayToDataTable(dataArray);
   const chart = new google.visualization.PieChart(container);
+
+  if (typeof onSelectCallback === 'function') {
+    google.visualization.events.addListener(chart, 'select', () => {
+      const selection = chart.getSelection();
+      if (selection && selection.length > 0 && selection[0].row !== null) {
+        const selectedLabel = data.getValue(selection[0].row, 0);
+        chart.setSelection([]); // ล้างการเลือกเพื่อให้กดซ้ำได้ตลอด
+        onSelectCallback(selectedLabel);
+      }
+    });
+
+    google.visualization.events.addListener(chart, 'onmouseover', () => {
+      container.style.cursor = 'pointer';
+    });
+    google.visualization.events.addListener(chart, 'onmouseout', () => {
+      container.style.cursor = 'default';
+    });
+  }
+
   chart.draw(data, options);
 }
 
-// วาดกราฟโดนัทคงเหลือ/ใช้ไปของการ์ดแต่ละใบด้านล่าง
 function renderDonutChart(containerId, used, remain) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -232,7 +279,6 @@ function renderDonutChart(containerId, used, remain) {
   safeDrawPieChart(containerId, dataArray, options);
 }
 
-// วาด 3 กราฟภาพรวมด้านบน
 function renderOverviewCharts(plans) {
   if (!plans || plans.length === 0) return;
 
@@ -253,16 +299,17 @@ function renderOverviewCharts(plans) {
     }
   });
 
-  // 1. งบประมาณตามกลุ่มบริหารงาน (donutDept)
-  renderPieDonutCategory('donutDept', 'กลุ่มบริหารงาน', deptSummary);
+  // 1. งบประมาณตามกลุ่มบริหารงาน (คลิกชิ้นส่วนกราฟเพื่อดูรายการตามฝ่าย)
+  renderPieDonutCategory('donutDept', 'กลุ่มบริหารงาน', deptSummary, (selectedDept) => {
+    openBudgetDetailByDept(selectedDept);
+  });
 
-  // 2. งบประมาณตามแหล่งงบประมาณ (donutTypeBudget)
+  // 2. งบประมาณตามแหล่งงบประมาณ
   renderPieDonutCategory('donutTypeBudget', 'แหล่งงบประมาณ', fundBudgetSummary);
 
-  // 3. ยอดใช้จ่ายจริงตามประเภทเงิน (donutTypeSpent)
+  // 3. ยอดใช้จ่ายจริงตามประเภทเงิน
   renderPieDonutCategory('donutTypeSpent', 'ประเภทเงิน', fundSpentSummary);
 
-  // สรุปตัวเลขใต้กราฟที่ 3
   const sumSpentElem = document.getElementById('sumTypeSpent');
   if (sumSpentElem) {
     const totalSpentAll = Object.values(fundSpentSummary).reduce((a, b) => a + b, 0);
@@ -270,7 +317,7 @@ function renderOverviewCharts(plans) {
   }
 }
 
-function renderPieDonutCategory(containerId, categoryLabel, summaryData) {
+function renderPieDonutCategory(containerId, categoryLabel, summaryData, onSelectCallback = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -293,20 +340,19 @@ function renderPieDonutCategory(containerId, categoryLabel, summaryData) {
     pieSliceText: 'percentage'
   };
 
-  safeDrawPieChart(containerId, dataArray, options);
+  safeDrawPieChart(containerId, dataArray, options, onSelectCallback);
 }
 
 function updateFundCardLabels(fundSummary) {
   const cardMapping = {
     'อุดหนุน': { chartId: 'progress_อุดหนุน', labelId: 'sumProgress_อุดหนุน' },
-    'อุดหนุน งบประมาณคงเหลือปี 68': { chartId: 'progress_อุดหนุน_งบประมาณคงเหลือปี_68', labelId: 'sumProgress_อุดหนุน_งบประมาณคงเหลือปี_68' },
+    'อุดหนุน งบประมาณคงเหลือปี 69': { chartId: 'progress_อุดหนุน_งบประมาณคงเหลือปี_68', labelId: 'sumProgress_อุดหนุน_งบประมาณคงเหลือปี_69' },
     'กิจกรรมพัฒนาผู้เรียน': { chartId: 'progress_กิจกรรมพัฒนาผู้เรียน', labelId: 'sumProgress_กิจกรรมพัฒนาผู้เรียน' },
     'รายได้สถานศึกษารวม': { chartId: 'progress_สรุปรายได้', labelId: 'sumProgress_สรุปรายได้' },
     'รายได้ SMTE': { chartId: 'progress_รายได้_SMTE', labelId: 'sumProgress_รายได้_SMTE' },
     'รายได้ STI': { chartId: 'progress_รายได้_STI', labelId: 'sumProgress_รายได้_STI' },
-    'รายได้ คอมพิวเตอร์': { chartId: 'progress_รายได้_คอมพิวเตอร์', labelId: 'sumProgress_รายได้_คอมพิวเตอร์' },
+    'รายได้ กีฬา': { chartId: 'progress_รายได้_กีฬา', labelId: 'sumProgress_รายได้_กีฬา' },
     'รายได้ ภาษาอังกฤษ': { chartId: 'progress_รายได้_ภาษาอังกฤษ', labelId: 'sumProgress_รายได้_ภาษาอังกฤษ' },
-    'รายได้ EIS': { chartId: 'progress_รายได้_EIS', labelId: 'sumProgress_รายได้_EIS' },
     'รายได้ ภาษาจีน': { chartId: 'progress_รายได้_ภาษาจีน', labelId: 'sumProgress_รายได้_ภาษาจีน' },
     'รายได้ หอพัก': { chartId: 'progress_รายได้_หอพัก', labelId: 'sumProgress_รายได้_หอพัก' },
     'รายได้สถานศึกษา': { chartId: 'progress_รายได้สถานศึกษา', labelId: 'sumProgress_รายได้สถานศึกษา' }
@@ -339,41 +385,28 @@ function updateFundCardLabels(fundSummary) {
 // 🔍 4. MODAL DETAIL POP-UP (คัดกรองข้อมูลจาก Cache 7 คอลัมน์)
 // ============================================================================
 
-export function openBudgetDetail(fundType) {
+function renderBudgetDetailModal(titleText, plansData) {
   const modalElement = document.getElementById('budgetDetailModal');
   if (!modalElement) return;
   
-  const modal = new bootstrap.Modal(modalElement);
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
   
   const titleElem = document.getElementById('modalFundTypeTitle');
-  if (titleElem) titleElem.innerText = fundType;
+  if (titleElem) titleElem.innerText = titleText;
 
   const loading = document.getElementById('modalLoading');
   const tableWrapper = document.getElementById('modalTableWrapper');
   const emptyMsg = document.getElementById('modalEmptyMsg');
   const tbody = document.getElementById('modalBudgetDetailBody');
 
-  if (loading) loading.classList.remove('d-none');
+  if (loading) loading.classList.add('d-none');
   if (tableWrapper) tableWrapper.classList.add('d-none');
   if (emptyMsg) emptyMsg.classList.add('d-none');
   if (tbody) tbody.innerHTML = '';
 
   modal.show();
 
-  let plansData = [];
-  if (window.budgetPlansCache && Array.isArray(window.budgetPlansCache)) {
-    if (fundType === 'รายได้สถานศึกษารวม') {
-      plansData = window.budgetPlansCache.filter(item => 
-        item.fund_type && String(item.fund_type).includes('รายได้')
-      );
-    } else {
-      plansData = window.budgetPlansCache.filter(item => item.fund_type === fundType);
-    }
-  }
-
-  if (loading) loading.classList.add('d-none');
-
-  if (plansData.length === 0) {
+  if (!plansData || plansData.length === 0) {
     if (emptyMsg) emptyMsg.classList.remove('d-none');
     return;
   }
@@ -382,7 +415,7 @@ export function openBudgetDetail(fundType) {
   plansData.forEach((item) => {
     const total = Number(item.total_budget || 0);
     const used = Number(item.used_budget || 0);
-    const remain = Number(item.remaining_budget || (total - used));
+    const remain = Number(item.remaining_budget ?? (total - used));
 
     rowsHtml += `
       <tr>
@@ -402,6 +435,40 @@ export function openBudgetDetail(fundType) {
 
   if (tbody) tbody.innerHTML = rowsHtml;
   if (tableWrapper) tableWrapper.classList.remove('d-none');
+}
+
+// เปิด Modal แสดงรายการตามประเภทเงิน (เมื่อกดการ์ดด้านล่าง)
+export function openBudgetDetail(fundType) {
+  let plansData = [];
+  if (window.budgetPlansCache && Array.isArray(window.budgetPlansCache)) {
+    if (fundType === 'รายได้สถานศึกษารวม') {
+      plansData = window.budgetPlansCache.filter(item => 
+        item.fund_type && String(item.fund_type).includes('รายได้')
+      );
+    } else if (fundType === 'รายได้ ภาษาอังกฤษ') {
+      plansData = window.budgetPlansCache.filter(item => 
+        item.fund_type === 'รายได้ ภาษาอังกฤษ' || item.fund_type === 'รายได้ Eng'
+      );
+    } else if (fundType === 'รายได้ ภาษาจีน') {
+      plansData = window.budgetPlansCache.filter(item => 
+        item.fund_type === 'รายได้ ภาษาจีน' || item.fund_type === 'รายได้ China'
+      );
+    } else {
+      plansData = window.budgetPlansCache.filter(item => item.fund_type === fundType);
+    }
+  }
+
+  renderBudgetDetailModal(fundType, plansData);
+}
+
+// เปิด Modal แสดงรายการตามกลุ่มบริหารงาน/ฝ่าย (เมื่อกด Donut Chart ด้านบน)
+export function openBudgetDetailByDept(deptName) {
+  let plansData = [];
+  if (window.budgetPlansCache && Array.isArray(window.budgetPlansCache)) {
+    plansData = window.budgetPlansCache.filter(item => item.division === deptName);
+  }
+
+  renderBudgetDetailModal(`กลุ่มบริหารงาน: ${deptName} (${plansData.length} รายการ)`, plansData);
 }
 
 // ============================================================================
@@ -434,7 +501,10 @@ export async function filterByDept(deptName) {
       return `
         <tr>
           <td class="text-center">${item.division || '-'}</td>
-          <td>${item.project_name || '-'}</td>
+          <td>
+            <div>${item.project_name || '-'}</div>
+            <small class="text-muted">รหัส: ${item.project_id || item.id}</small>
+          </td>
           <td>${item.activity_name || '-'}</td>
           <td class="text-center"><span class="badge bg-secondary">${item.fund_type || '-'}</span></td>
           <td class="text-end fw-bold">${budget.toLocaleString('th-TH', {minimumFractionDigits:2})}</td>
@@ -453,7 +523,7 @@ export async function filterByDept(deptName) {
     tableBody.innerHTML = `
       <tr>
         <td colspan="9" class="text-center py-4 text-warning">
-          <i class="bi bi-exclamation-triangle me-1"></i> ไม่พบรายการโครงการในฝ่าย ${deptName}
+          <i class="bi bi-exclamation-triangle me-1"></i> ไม่พบรายการโครงการรหัส 70xxx ในฝ่าย ${deptName}
         </td>
       </tr>
     `;
@@ -555,6 +625,7 @@ window.getBudgetPlans = getBudgetPlans;
 window.getBudgetPlansByDept = getBudgetPlansByDept;
 window.loadKbsBudgetData = loadKbsBudgetData;
 window.openBudgetDetail = openBudgetDetail;
+window.openBudgetDetailByDept = openBudgetDetailByDept;
 window.resetFormToMain = resetFormToMain;
 window.filterByDept = filterByDept;
 window.openDisburseModal = openDisburseModal;

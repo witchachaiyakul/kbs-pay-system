@@ -343,3 +343,51 @@
         border: 1px dashed #333;
       }
     }
+
+
+  #addPayRegModal .modal-dialog,
+    #editPayRegModal .modal-dialog {
+      max-width: 760px !important;
+      width: 95% !important;
+      margin: 1.5rem auto !important;
+    }
+
+    #addPayRegModal .modal-content,
+    #editPayRegModal .modal-content {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 100% !important;
+      overflow: hidden;
+    }
+
+    #addPayRegModal .modal-header,
+    #editPayRegModal .modal-header,
+    #addPayRegModal .modal-body,
+    #editPayRegModal .modal-body,
+    #addPayRegModal .modal-footer,
+    #editPayRegModal .modal-footer {
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+
+    #addPayRegModal .modal-footer,
+    #editPayRegModal .modal-footer {
+      display: flex !important;
+      justify-content: flex-end !important;
+      align-items: center !important;
+      gap: 0.5rem !important;
+      border-top: 1px solid #dee2e6 !important;
+    }
+
+    #addPayRegModal .input-group-text,
+    #editPayRegModal .input-group-text {
+      white-space: nowrap !important;
+      width: auto !important;
+    }
+
+    #addPayRegModal .form-control,
+    #editPayRegModal .form-control,
+    #addPayRegModal .form-select,
+    #editPayRegModal .form-select {
+      min-width: 0 !important;
+    }

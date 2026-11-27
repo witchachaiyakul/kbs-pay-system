@@ -70,30 +70,37 @@
       <div class="mx-auto" style="height: 3px; width: 140px; background-color: var(--gold-accent, #d4af37);"></div>
     </div>
 
-    <!-- User Management Table Card -->
+<!-- User Management Table Card -->
     <div class="card card-section p-0">
-      <div class="card-section-header d-flex justify-content-between align-items-center">
+      <div class="card-section-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <span><i class="bi bi-people me-2"></i>รายชื่อผู้ใช้งานและสิทธิ์เข้าถึงระบบ</span>
-        <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" onclick="loadUsersTable()">
-          <i class="bi bi-arrow-clockwise me-1"></i> รีเฟรชข้อมูล
-        </button>
+        <div class="d-flex align-items-center gap-2">
+          <div class="input-group input-group-sm" style="width: 240px;">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" id="searchUserRole" class="form-control" placeholder="ค้นหาชื่อ, ตำแหน่ง, ฝ่าย..." oninput="filterUsersTable()">
+          </div>
+          <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm text-nowrap" onclick="loadUsersTable()">
+            <i class="bi bi-arrow-clockwise me-1"></i> รีเฟรชข้อมูล
+          </button>
+        </div>
       </div>
       <div class="table-responsive">
         <table class="table table-hover table-bordered align-middle m-0 text-center">
           <thead class="table-dark" style="background-color: var(--navy-dark, #0f172a);">
             <tr class="small align-middle">
-              <th style="width: 5%;">#</th>
-              <th style="width: 22%;">ชื่อ-นามสกุล</th>
-              <th style="width: 20%;">ตำแหน่ง</th>
-              <th style="width: 18%;">ระดับสิทธิ์ (Role)</th>
-              <th style="width: 15%;">สิทธิ์เมนูเฉพาะ</th>
-              <th style="width: 10%;">สถานะ</th>
-              <th style="width: 10%;">จัดการ</th>
+              <th style="width: 4%;">#</th>
+              <th style="width: 20%;">ชื่อ-นามสกุล</th>
+              <th style="width: 17%;">ตำแหน่ง</th>
+              <th style="width: 17%;">ระดับสิทธิ์ (Role)</th>
+              <th style="width: 12%;">สิทธิ์เมนูเฉพาะ</th>
+              <th style="width: 14%;">เจ้าหน้าที่พัสดุ</th>
+              <th style="width: 8%;">สถานะ</th>
+              <th style="width: 8%;">จัดการ</th>
             </tr>
           </thead>
           <tbody id="userManagementTableBody">
             <tr>
-              <td colspan="7" class="py-4 text-muted">
+              <td colspan="8" class="py-4 text-muted">
                 <i class="bi bi-inbox fs-2 d-block mb-2"></i>กดปุ่มรีเฟรช หรือรอโหลดข้อมูลผู้ใช้งาน...
               </td>
             </tr>
@@ -128,6 +135,46 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
         <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="savePermissionsFromModal()">
           <i class="bi bi-check-circle me-1"></i> ตกลงสิทธิ์เมนู
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================================
+     📦 MODAL: จัดการเจ้าหน้าที่พัสดุ (เลือกฝ่ายที่รับผิดชอบ)
+============================================================================ -->
+<div class="modal fade" id="officerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content shadow-lg border-0 rounded-3">
+      <div class="modal-header text-white" style="background-color: #0f172a;">
+        <h5 class="modal-title fw-bold text-white">
+          <i class="bi bi-box-seam-fill me-2 text-warning"></i>จัดการเจ้าหน้าที่พัสดุ (ฝ่าย/งาน)
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="alert alert-light border mb-3 py-2">
+          <div class="fw-bold text-navy" id="officerUserName">ผู้ใช้งาน: -</div>
+          <small class="text-muted">เลือกฝ่ายที่รับผิดชอบ (บันทึกในฟิลด์ <code>officer</code>)</small>
+        </div>
+
+        <div class="input-group input-group-sm mb-3">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="text" id="searchOfficerDivision" class="form-control" placeholder="พิมพ์ค้นหาฝ่าย..." oninput="filterOfficerDivisions()">
+        </div>
+
+        <div id="officerDivisionsList" class="d-flex flex-column gap-2">
+          <!-- รายการฝ่ายจะถูกสร้างจาก JS -->
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-outline-danger btn-sm me-auto" onclick="clearOfficerDivisionsInModal()">
+          <i class="bi bi-x-circle me-1"></i>ล้างการเลือกทั้งหมด
+        </button>
+        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-warning fw-bold px-4" onclick="saveOfficerFromModal()">
+          <i class="bi bi-check-circle-fill me-1"></i> ตกลง
         </button>
       </div>
     </div>
